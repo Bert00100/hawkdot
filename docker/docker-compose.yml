@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: hawkdot-PSQL
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: hawkdot
+      POSTGRES_USER: adm
+      POSTGRES_PASSWORD: S3curity@300
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
