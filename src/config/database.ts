@@ -1,11 +1,14 @@
-import { Pool } from "pg";
+import { PrismaClient } from "../generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const pool = new Pool({
-   host: process.env.DB_HOST,
-   port: Number (process.env.DB_PORT), 
-   database: process.env.DB_NAME,
-   user: process.env.DB_USER,
-   password: process.env.DB_PASSWORD,
-});
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
-export default pool
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+
+const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
+
+export default prisma;
