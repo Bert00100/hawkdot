@@ -16,7 +16,6 @@ export async function checkDatabaseConnection() {
       success: false,
       database: "PostgreSQL",
       error: "Unable to connect to database",
-    }
+    };
   }
-  
 }
