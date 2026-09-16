@@ -7,6 +7,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "db:test:setup": "bash scripts/setup-test-db.sh",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
