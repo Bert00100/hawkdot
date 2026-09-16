@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Artefatos gerados: relatorio de cobertura do Jest e Prisma Client.
+    "coverage/**",
+    "src/generated/**",
   ]),
 ]);
 
