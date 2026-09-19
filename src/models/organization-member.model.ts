@@ -26,6 +26,8 @@ export async function createOwnerMembership(
 
 export type ActiveMembership = {
     organization_id: string;
+    organization_name: string;
+    organization_slug: string;
     role: "owner" | "admin" | "operator" | "viewer";
     joined_at: Date;
 };

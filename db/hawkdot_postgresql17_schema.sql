@@ -968,18 +968,29 @@ GRANT EXECUTE ON FUNCTION hawkdot_private.find_login_credentials(citext) TO hawk
 -- -- ou seja, so enxerga membership de uma org que a aplicacao ja saiba de
 -- antemao. No login, e exatamente o organization_id que ainda nao se sabe
 -- (e o que esta funcao existe para descobrir); no /me, o objetivo e listar
--- TODAS as organizacoes do usuario, nao so a ativa. Mesmo padrao da #12:
--- SECURITY DEFINER, row_security off, devolve o minimo necessario.
+-- TODAS as organizacoes do usuario, nao so a ativa -- e organizations_member_select
+-- tem a mesma restricao (so enxerga a organizacao ativa), entao name/slug de
+-- uma organizacao que nao e a ativa tambem ficariam invisiveis numa query
+-- comum dentro do tx. Por isso a funcao ja faz o JOIN com organizations
+-- aqui dentro (SECURITY DEFINER, row_security off), em vez do chamador
+-- precisar de uma segunda consulta por organizacao.
 CREATE FUNCTION hawkdot_private.find_active_organization_memberships(p_user_id uuid)
-RETURNS TABLE (organization_id uuid, role hawkdot.member_role, joined_at timestamptz)
+RETURNS TABLE (
+    organization_id uuid,
+    organization_name text,
+    organization_slug citext,
+    role hawkdot.member_role,
+    joined_at timestamptz
+)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, hawkdot
 SET row_security = off
 AS $function$
-    SELECT m.organization_id, m.role, m.joined_at
+    SELECT m.organization_id, o.name, o.slug, m.role, m.joined_at
     FROM hawkdot.organization_members AS m
+    JOIN hawkdot.organizations AS o ON o.id = m.organization_id
     WHERE m.user_id = p_user_id
       AND m.status = 'active'::hawkdot.member_status
     ORDER BY m.joined_at ASC
