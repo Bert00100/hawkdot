@@ -16,3 +16,10 @@ export const updateOrganizationSchema = z
     });
 
 export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;
+
+export const inviteMemberSchema = z.object({
+    email: dto.email,
+    role: dto.papel,
+});
+
+export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;

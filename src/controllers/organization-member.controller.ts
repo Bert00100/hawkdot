@@ -3,8 +3,13 @@ import type { Session } from "@/lib/auth/require-session";
 import type { Paginacao } from "@/lib/dto/common";
 import {
     countOrganizationMembers,
+    createInvite,
     listOrganizationMembers,
 } from "@/models/organization-member.model";
+import { findUserIdByEmail } from "@/models/user.model";
+import { requireRole } from "@/lib/auth/require-role";
+import { notFound } from "@/lib/errors";
+import type { InviteMemberInput } from "@/lib/dto/organization.dto";
 
 export type MemberListResult = {
     items: {
@@ -47,4 +52,41 @@ export async function listMembers(
         per_page,
         total,
     };
+}
+
+export type InviteMemberResult = {
+    user_id: string;
+    role: string;
+    status: string;
+};
+
+// Decisao documentada (issue #23): o schema nao tem tabela de convites por
+// e-mail nem coluna nullable para isso em organization_members (user_id e
+// NOT NULL, referencia users). Criar essa estrutura seria uma mudanca de
+// banco maior, fora do escopo do MVP. Por isso o convite so funciona para
+// e-mail que ja tem conta -- se nao tiver, a resposta e 404 com mensagem
+// clara pedindo que a pessoa crie conta primeiro (nao 500, nao um "convite
+// fantasma" que nunca vira nada).
+export async function inviteMember(
+    tx: TenantClient,
+    session: Session,
+    input: InviteMemberInput,
+): Promise<InviteMemberResult> {
+    await requireRole(tx, session, ["owner", "admin"]);
+
+    const userId = await findUserIdByEmail(input.email);
+    if (!userId) {
+        throw notFound(
+            "Nao encontramos uma conta com esse e-mail. A pessoa precisa criar uma conta antes de ser convidada.",
+        );
+    }
+
+    const membership = await createInvite(tx, {
+        organizationId: session.organizationId,
+        userId,
+        role: input.role,
+        invitedBy: session.userId,
+    });
+
+    return { user_id: membership.user_id, role: membership.role, status: membership.status };
 }

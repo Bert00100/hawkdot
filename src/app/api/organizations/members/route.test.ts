@@ -1,4 +1,4 @@
-import { GET } from "@/app/api/organizations/members/route";
+import { GET, POST } from "@/app/api/organizations/members/route";
 import { signSessionToken } from "@/lib/auth/jwt";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/session-cookie";
 import { basePrisma } from "@/config/database";
@@ -59,5 +59,40 @@ describe("GET /api/organizations/members", () => {
     it("sem sessao, 401", async () => {
         const response = await GET(new Request("http://localhost/api/organizations/members"));
         expect(response.status).toBe(401);
+    });
+});
+
+describe("POST /api/organizations/members", () => {
+    it("owner convida um usuario existente e responde 201", async () => {
+        const { user, organization } = await createFullTenant();
+        const convidado = await createUser({ email: "convidado-rota@teste.hawkdot" });
+        const token = await signSessionToken({ user_id: user.id, organization_id: organization.id });
+
+        const response = await POST(
+            new Request("http://localhost/api/organizations/members", {
+                method: "POST",
+                headers: { cookie: `${SESSION_COOKIE_NAME}=${token}` },
+                body: JSON.stringify({ email: "convidado-rota@teste.hawkdot", role: "operator" }),
+            }),
+        );
+
+        expect(response.status).toBe(201);
+        const body = await response.json();
+        expect(body).toEqual({ user_id: convidado.id, role: "operator", status: "invited" });
+    });
+
+    it("email invalido no corpo retorna 400", async () => {
+        const { user, organization } = await createFullTenant();
+        const token = await signSessionToken({ user_id: user.id, organization_id: organization.id });
+
+        const response = await POST(
+            new Request("http://localhost/api/organizations/members", {
+                method: "POST",
+                headers: { cookie: `${SESSION_COOKIE_NAME}=${token}` },
+                body: JSON.stringify({ email: "nao-e-email", role: "viewer" }),
+            }),
+        );
+
+        expect(response.status).toBe(400);
     });
 });

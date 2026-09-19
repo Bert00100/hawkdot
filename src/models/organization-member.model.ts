@@ -81,3 +81,26 @@ export async function countOrganizationMembers(tx: TenantClient): Promise<number
 
     return Number(rows[0]?.count ?? 0);
 }
+
+export type MemberRole = "owner" | "admin" | "operator" | "viewer";
+
+// So roda dentro de withTenant() com o convidante ja como membro
+// owner/admin (verificado por requireRole antes de chamar). RETURNING
+// funciona normalmente aqui -- diferente do bootstrap do signup, o
+// convidante ja e membro ativo da organizacao, entao
+// is_organization_member(organization_id) ja e verdadeiro para qualquer
+// linha dessa org, inclusive a que esta sendo inserida.
+export function createInvite(
+    tx: TenantClient,
+    params: { organizationId: string; userId: string; role: MemberRole; invitedBy: string },
+) {
+    return tx.organization_members.create({
+        data: {
+            organization_id: params.organizationId,
+            user_id: params.userId,
+            role: params.role,
+            status: "invited",
+            invited_by: params.invitedBy,
+        },
+    });
+}

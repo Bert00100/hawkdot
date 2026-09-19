@@ -37,3 +37,16 @@ export type CreateUserData = {
 export function createUserRecord(tx: TenantClient, data: CreateUserData) {
     return tx.users.create({ data });
 }
+
+// Roda ANTES de existir contexto de tenant (convite de membro, #23): quem
+// convida so tem o e-mail do convidado, nao o id. Mesmo padrao do login --
+// users_self_select bloquearia a busca, entao usa a funcao SECURITY
+// DEFINER hawkdot_private.find_user_id_by_email, que devolve so o id (nunca
+// password_hash nem outro dado do usuario alheio).
+export async function findUserIdByEmail(email: string): Promise<string | null> {
+    const rows = await prisma.$queryRaw<{ id: string | null }[]>`
+        SELECT hawkdot_private.find_user_id_by_email(${email}::citext) AS id
+    `;
+
+    return rows[0]?.id ?? null;
+}

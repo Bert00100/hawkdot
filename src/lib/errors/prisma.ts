@@ -45,9 +45,13 @@ const UNIQUE_MESSAGES: Record<string, { field: string; message: string }> = {
         field: "email",
         message: "Ja existe uma conta com esse e-mail.",
     },
-    organization_members_organization_id_user_id_key: {
+    // PK composta (organization_id, user_id) -- nao uma UNIQUE nomeada.
+    // Verificado contra o banco real: a entrada anterior deste dicionario
+    // citava um nome de constraint que nao existe (organization_members_
+    // organization_id_user_id_key) e nunca teria batido.
+    organization_members_pkey: {
         field: "user_id",
-        message: "Esse usuario ja e membro da organizacao.",
+        message: "Esse usuario ja e membro (ou ja foi convidado) para esta organizacao.",
     },
 };
 
