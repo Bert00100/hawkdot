@@ -6,7 +6,8 @@ import {
     findPingCheckConfig,
     findSslCheckConfig,
 } from "@/worker/monitor-config.model";
-import { createMonitorExecution, updateMonitorLastCheck } from "@/worker/monitor-execution.model";
+import { createMonitorExecution } from "@/worker/monitor-execution.model";
+import { applyCheckResult } from "@/worker/incident-state-machine";
 
 // Roda o check de UM monitor reservado (#34) e persiste o resultado (#36),
 // tudo dentro da mesma withWorkerTenant() -- cada monitor abre sua propria
@@ -43,7 +44,7 @@ export async function executeMonitor(reserved: ReservedMonitor): Promise<void> {
         );
         const finishedAt = new Date();
 
-        await createMonitorExecution(tx, {
+        const execution = await createMonitorExecution(tx, {
             organizationId: reserved.organization_id,
             monitorId: reserved.id,
             checkStatus: result.check_status,
@@ -55,6 +56,8 @@ export async function executeMonitor(reserved: ReservedMonitor): Promise<void> {
             details: result.details,
         });
 
-        await updateMonitorLastCheck(tx, reserved.id, finishedAt);
+        // Atualiza current_state/contadores/last_check_at e abre ou resolve
+        // incidente conforme o limiar configurado (#37).
+        await applyCheckResult(tx, reserved.id, execution.id, result, finishedAt);
     });
 }

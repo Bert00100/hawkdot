@@ -1,4 +1,4 @@
-import { createMonitorExecution, updateMonitorLastCheck } from "@/worker/monitor-execution.model";
+import { createMonitorExecution } from "@/worker/monitor-execution.model";
 import { withWorkerTenant } from "@/worker/with-worker-tenant";
 import { workerBasePrisma } from "@/worker/database";
 import { adminClient } from "@/test-utils/admin-client";
@@ -61,18 +61,5 @@ describe("createMonitorExecution", () => {
         );
 
         expect(execucao.duration_ms).toBe(0);
-    });
-});
-
-describe("updateMonitorLastCheck", () => {
-    it("atualiza last_check_at do monitor", async () => {
-        const { organization, monitor } = await createFullTenant();
-        const quando = new Date();
-
-        const atualizado = await withWorkerTenant(organization.id, (tx) =>
-            updateMonitorLastCheck(tx, monitor.id, quando),
-        );
-
-        expect(atualizado.last_check_at?.getTime()).toBe(quando.getTime());
     });
 });

@@ -35,9 +35,3 @@ export function createMonitorExecution(tx: WorkerTenantClient, data: CreateExecu
     });
 }
 
-export function updateMonitorLastCheck(tx: WorkerTenantClient, monitorId: string, lastCheckAt: Date) {
-    return tx.monitors.update({
-        where: { id: monitorId },
-        data: { last_check_at: lastCheckAt },
-    });
-}
