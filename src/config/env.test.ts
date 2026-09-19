@@ -1,4 +1,4 @@
-import { parseEnv } from "@/config/env";
+import { parseEnv, workerDatabaseUrl } from "@/config/env";
 
 // Base valida minima, usada como ponto de partida em cada caso.
 const validEnv = {
@@ -92,6 +92,16 @@ describe("parseEnv", () => {
 
         it("nao exige as URLs de teste fora do ambiente de teste", () => {
             expect(() => parseEnv(validEnv)).not.toThrow();
+        });
+    });
+
+    describe("workerDatabaseUrl", () => {
+        it("nao e obrigatoria no schema principal -- a API sobe sem ela", () => {
+            expect(() => parseEnv(validEnv)).not.toThrow();
+        });
+
+        it("devolve DATABASE_URL_WORKER_TEST em NODE_ENV=test (ja setada no .env local)", () => {
+            expect(workerDatabaseUrl()).toEqual(expect.stringContaining("hawkdot_worker_login"));
         });
     });
 

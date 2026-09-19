@@ -42,6 +42,14 @@ const envSchema = z
         // TTL curto: sem tabela de sessions, nao ha revogacao imediata.
         JWT_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
 
+        // M6 - Motor de Monitoramento (#33): conexao do worker, role
+        // hawkdot_worker_login. Opcional AQUI de proposito -- e um processo
+        // separado da API (ver src/worker/), entao a API nao deve falhar o
+        // boot por causa de uma variavel que so o worker usa. O worker
+        // valida a propria presenca no startup dele (workerEnv() abaixo).
+        DATABASE_URL_WORKER: postgresUrl.optional(),
+        DATABASE_URL_WORKER_TEST: postgresUrl.optional(),
+
         // Preparada para a M7. Continua opcional enquanto a feature nao
         // existe; quando a M7 chegar, move-se para obrigatoria no ambiente
         // correspondente.
@@ -103,4 +111,21 @@ export function testDatabaseUrls(): { app: string; admin: string } {
     }
 
     return { app, admin };
+}
+
+// So o processo worker chama isso -- falha explicita e imediata se a
+// variavel do worker faltar, em vez do worker tentar conectar com a URL da
+// API (que tem privilegios diferentes) ou seguir sem banco nenhum.
+export function workerDatabaseUrl(): string {
+    const url = env.NODE_ENV === "test" ? env.DATABASE_URL_WORKER_TEST : env.DATABASE_URL_WORKER;
+
+    if (!url) {
+        throw new Error(
+            "DATABASE_URL_WORKER" +
+                (env.NODE_ENV === "test" ? "_TEST" : "") +
+                " nao esta definida -- o processo worker precisa dela para conectar como hawkdot_worker_login.",
+        );
+    }
+
+    return url;
 }

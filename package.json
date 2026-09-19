@@ -8,6 +8,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "db:test:setup": "bash scripts/setup-test-db.sh",
+    "worker": "tsx src/worker/run.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -31,11 +32,13 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^18.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "jest": "^30.5.1",
     "prisma": "^7.10.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }
