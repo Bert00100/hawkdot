@@ -153,3 +153,23 @@ Confirmado com `EXPLAIN (VERBOSE, COSTS OFF)` contra o banco real: o Postgres in
 # Rotas dinâmicas exigem `next typegen`
 
 O helper `RouteContext<'/caminho/[param]'>` (usado para tipar o segundo argumento de rotas dinâmicas) só existe para as rotas que o Next já viu — o tipo é gerado, não vem do TypeScript puro. Depois de criar uma pasta com `[param]`, rode `npx next typegen` antes de `tsc --noEmit` (ou rode `npm run dev`/`next build` uma vez), senão o compilador acusa `Type '"/caminho/[param]"' does not satisfy the constraint '"/api/health"'` — o tipo antigo, gerado antes da rota nova existir.
+
+# Padrão pai+filho para recursos e monitores (#26)
+
+13 tabelas do schema seguem "tabela pai + tabela filha por tipo": `resources` (comum) + `domain_resources`/`ip_resources`/`server_resources`/`database_resources`/`endpoint_resources`; `monitors` (comum) + `ssl_monitor_configs`/`http_monitor_configs`/`ping_monitor_configs`/etc. A amarração é uma **FK composta** incluindo o próprio tipo:
+
+```sql
+FOREIGN KEY (resource_id, organization_id, resource_type)
+    REFERENCES hawkdot.resources (id, organization_id, resource_type)
+```
+
+Isso garante, no próprio banco, que uma linha de `domain_resources` só pode apontar para uma `resources` com `resource_type = 'domain'` — mas exige que a aplicação grave o mesmo tipo nos dois lugares.
+
+**O padrão** (referência: `src/controllers/resource.controller.ts`, tipo `domain`):
+
+1. Gerar o `id` do recurso na aplicação (`randomUUID()`) — não `gen_random_uuid()` do banco, porque a filha precisa desse id antes de existir.
+2. Dentro da mesma `withTenant()`, inserir o pai (`createResourceParent`) e depois a filha (`createDomainResource`) com o **mesmo** `resourceType`/`resource_type` nos dois.
+3. Tipo incoerente entre pai e filha é barrado pela FK composta — vira 400/409 traduzido normalmente pelo `translatePrismaError` (#6), não precisa de validação manual extra.
+4. Update/delete seguem o mesmo padrão de duas chamadas na mesma transação; `ON DELETE CASCADE` cuida da filha quando o pai é removido.
+
+**Diferente do bootstrap do signup (#14) e do aceite de convite (#24), aqui não há problema de `RETURNING`**: quem cria/lê/atualiza um recurso já é membro ativo da organização (passou por `requireRole` ou pelo menos por `withSession`), então `tenant_app_select` já enxerga a linha sem a circularidade daqueles dois casos — os models usam `.create()`/`.update()` normais do Prisma, sem precisar do workaround de `$executeRaw` sem `RETURNING`.

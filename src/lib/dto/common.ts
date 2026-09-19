@@ -116,3 +116,8 @@ export const paginacao = z.object({
 });
 
 export type Paginacao = z.infer<typeof paginacao>;
+
+// *_resources.address (tipo inet do Postgres, aceita IPv4 e IPv6).
+export const ipAddress = z.union([z.ipv4(), z.ipv6()], {
+    error: "Informe um endereco IPv4 ou IPv6 valido.",
+});
