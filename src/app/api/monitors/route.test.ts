@@ -27,7 +27,12 @@ describe("rotas de monitores", () => {
             new Request("http://localhost/api/monitors", {
                 method: "POST",
                 headers: cookie,
-                body: JSON.stringify({ resource_id: resource.id, monitor_type: "http", name: "Rota" }),
+                body: JSON.stringify({
+                    resource_id: resource.id,
+                    monitor_type: "http",
+                    name: "Rota",
+                    config: { url: "https://exemplo.com/health" },
+                }),
             }),
         );
         expect(criarResp.status).toBe(201);
@@ -70,12 +75,15 @@ describe("rotas de monitores", () => {
                     monitor_type: "http",
                     name: "Invalido",
                     interval_seconds: 3,
+                    config: { url: "https://exemplo.com/health" },
                 }),
             }),
         );
 
         expect(response.status).toBe(400);
         const body = await response.json();
-        expect(body.error.details?.[0]?.field).toBe("interval_seconds");
+        expect(body.error.details?.some((d: { field: string }) => d.field === "interval_seconds")).toBe(
+            true,
+        );
     });
 });

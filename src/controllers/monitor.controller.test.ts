@@ -9,7 +9,7 @@ import { createMonitorSchema } from "@/lib/dto/monitor.dto";
 import { parseInput } from "@/lib/dto";
 import { errorResponse } from "@/lib/errors";
 import { basePrisma } from "@/config/database";
-import { createFullTenant, createMember, createResource, createUser } from "@/test-utils/factories";
+import { createFullTenant, createMember, createUser } from "@/test-utils/factories";
 import { cleanDatabase } from "@/test-utils/cleanup";
 
 beforeEach(async () => {
@@ -21,6 +21,13 @@ afterAll(async () => {
     await basePrisma.$disconnect();
 });
 
+const httpInput = (overrides: Record<string, unknown> = {}) => ({
+    monitor_type: "http" as const,
+    name: "Monitor de saude",
+    config: { url: "https://exemplo.com/health" },
+    ...overrides,
+});
+
 describe("createMonitor / getMonitor / updateMonitor / deleteMonitor", () => {
     it("cria, le, atualiza e remove um monitor", async () => {
         const { user, organization, resource } = await createFullTenant();
@@ -30,14 +37,11 @@ describe("createMonitor / getMonitor / updateMonitor / deleteMonitor", () => {
             createMonitorController(
                 tx,
                 session,
-                parseInput(createMonitorSchema, {
-                    resource_id: resource.id,
-                    monitor_type: "http",
-                    name: "Monitor de saude",
-                }),
+                parseInput(createMonitorSchema, httpInput({ resource_id: resource.id })),
             ),
         );
         expect(criado).toMatchObject({ name: "Monitor de saude", monitor_type: "http", status: "active" });
+        expect(criado.config).toMatchObject({ url: "https://exemplo.com/health", method: "GET" });
 
         const lido = await withTenant(session, (tx) => getMonitor(tx, criado.id));
         expect(lido.name).toBe("Monitor de saude");
@@ -55,11 +59,10 @@ describe("createMonitor / getMonitor / updateMonitor / deleteMonitor", () => {
     it("nome duplicado no mesmo recurso retorna 409", async () => {
         const { user, organization, resource } = await createFullTenant();
         const session = { userId: user.id, organizationId: organization.id };
-        const dados = parseInput(createMonitorSchema, {
-            resource_id: resource.id,
-            monitor_type: "http",
-            name: "Repetido",
-        });
+        const dados = parseInput(
+            createMonitorSchema,
+            httpInput({ resource_id: resource.id, name: "Repetido" }),
+        );
         await withTenant(session, (tx) => createMonitorController(tx, session, dados));
 
         const erro = await withTenant(session, (tx) =>
@@ -78,11 +81,7 @@ describe("createMonitor / getMonitor / updateMonitor / deleteMonitor", () => {
             createMonitorController(
                 tx,
                 session,
-                parseInput(createMonitorSchema, {
-                    resource_id: outroTenant.resource.id,
-                    monitor_type: "http",
-                    name: "Cross-tenant",
-                }),
+                parseInput(createMonitorSchema, httpInput({ resource_id: outroTenant.resource.id })),
             ),
         ).catch((e) => e);
 
@@ -99,11 +98,7 @@ describe("createMonitor / getMonitor / updateMonitor / deleteMonitor", () => {
             createMonitorController(
                 tx,
                 session,
-                parseInput(createMonitorSchema, {
-                    resource_id: resource.id,
-                    monitor_type: "http",
-                    name: "Nao deveria existir",
-                }),
+                parseInput(createMonitorSchema, httpInput({ resource_id: resource.id })),
             ),
         ).catch((e) => e);
 
@@ -117,11 +112,7 @@ describe("createMonitor / getMonitor / updateMonitor / deleteMonitor", () => {
             createMonitorController(
                 tx,
                 session,
-                parseInput(createMonitorSchema, {
-                    resource_id: resource.id,
-                    monitor_type: "http",
-                    name: "Monitor X",
-                }),
+                parseInput(createMonitorSchema, httpInput({ resource_id: resource.id })),
             ),
         );
 

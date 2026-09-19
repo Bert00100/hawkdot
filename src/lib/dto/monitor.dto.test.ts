@@ -5,6 +5,7 @@ const validInput = {
     resource_id: "11111111-1111-4111-8111-111111111111",
     monitor_type: "http",
     name: "Monitor",
+    config: { url: "https://exemplo.com/health" },
 };
 
 describe("createMonitorSchema", () => {
@@ -45,5 +46,11 @@ describe("createMonitorSchema", () => {
 
     it("nome vazio e recusado", () => {
         expect(() => parseInput(createMonitorSchema, { ...validInput, name: "   " })).toThrow();
+    });
+
+    it("exige config compativel com o monitor_type (http sem url falha)", () => {
+        expect(() =>
+            parseInput(createMonitorSchema, { ...validInput, config: {} }),
+        ).toThrow();
     });
 });
