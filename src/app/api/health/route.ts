@@ -1,12 +1,6 @@
-import { NextResponse } from "next/server";
 import { checkDatabaseConnection } from "@/controllers/health.controller";
+import { handleRoute, okResponse } from "@/lib/errors";
 
-export async function GET() {
-    const result = await checkDatabaseConnection();
-
-    if(!result.success) {
-        return NextResponse.json(result, {status: 500});
-    }
-
-    return NextResponse.json(result);
-}
+export const GET = handleRoute(async () => {
+    return okResponse(await checkDatabaseConnection());
+});
