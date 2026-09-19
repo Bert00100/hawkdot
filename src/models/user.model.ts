@@ -1,4 +1,5 @@
 import prisma from "@/config/database";
+import type { TenantClient } from "@/lib/tenant/with-tenant";
 
 export type LoginCredentials = {
     id: string;
@@ -21,4 +22,18 @@ export async function findLoginCredentials(email: string): Promise<LoginCredenti
     `;
 
     return rows[0] ?? null;
+}
+
+export type CreateUserData = {
+    id: string;
+    email: string;
+    password_hash: string;
+    display_name: string;
+};
+
+// So roda dentro de withTenant() -- users_self_insert exige
+// id = current_user_id(), que precisa estar setado antes deste insert (por
+// isso o id vem pronto da aplicacao, nao de gen_random_uuid() no banco).
+export function createUserRecord(tx: TenantClient, data: CreateUserData) {
+    return tx.users.create({ data });
 }
