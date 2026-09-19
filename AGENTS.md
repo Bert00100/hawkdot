@@ -129,3 +129,13 @@ Ambas usam `$queryRaw`/`$executeRaw` no client guardado — a extensão do #10 s
 **A aplicação complementa o RLS, não o substitui.** Um helper como `requireRole` (M4) melhora a mensagem de erro (403 com texto claro em vez de um 404/lista vazia confuso) e evita uma query desnecessária, mas **nunca** é a única barreira — a policy de RLS correspondente sempre existe no banco. Se um helper de autorização tiver um bug, o RLS ainda impede o vazamento de dados.
 
 **`adm` (o superusuário) nunca é usado pela aplicação.** Ele tem `BYPASSRLS` — existe só para administração do banco e para os testes populares dados via `src/test-utils/admin-client.ts` (que roda como `adm` de propósito, para poder inserir dados de teste ignorando as policies). Qualquer código de produção que precisar de um client Postgres usa o role `hawkdot_app` (API) ou `hawkdot_worker` (worker), nunca `adm`.
+
+# Sessão e revogação (dívida técnica conhecida)
+
+O hawkdot usa JWT em cookie httpOnly sem tabela de `sessions` no banco (decisão da M3, já registrada em memória de projeto). Isso tem uma consequência que vale deixar explícita:
+
+**Não há revogação imediata.** Logout (`POST /api/auth/logout`) só limpa o cookie do lado do cliente — o token em si continua criptograficamente válido até expirar. Um token roubado (XSS que escapasse do `httpOnly`, log vazado, etc.) segue utilizável até o fim do TTL, mesmo depois de "logout" ou de trocar a senha.
+
+**Mitigação atual**: TTL curto (`JWT_TTL_SECONDS`, 1h por padrão) limita a janela de exposição. Não há refresh token nem reemissão automática por atividade no MVP — quando o token expira, o usuário loga de novo.
+
+**Se isso virar um problema real** (ex.: precisar de "logout em todos os dispositivos", ou revogar um token comprometido), as opções são: (a) voltar a ter uma tabela de sessions com um `jti` por token, checável a cada request — reintroduz uma query por request; ou (b) uma denylist de tokens revogados com TTL igual ao do JWT (Redis, por exemplo) — mais barata que sessions completas, mas é infraestrutura nova. Nenhuma das duas está implementada; fica registrado aqui para não ser redescoberto do zero.
