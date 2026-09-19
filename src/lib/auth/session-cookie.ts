@@ -20,3 +20,25 @@ export function setSessionCookie(response: NextResponse, token: string): void {
 export function clearSessionCookie(response: NextResponse): void {
     response.cookies.delete(SESSION_COOKIE_NAME);
 }
+
+// Le o cookie de sessao do Request de entrada. Parser manual (sem lib de
+// cookie) porque so precisamos extrair um valor por nome -- usar
+// next/headers `cookies()` aqui exigiria escopo de request ativo do Next,
+// o que quebraria testar o guard chamando a funcao direto (mesmo motivo de
+// setSessionCookie usar NextResponse.cookies em vez de cookies() async).
+export function readSessionCookie(request: Request): string | null {
+    const header = request.headers.get("cookie");
+    if (!header) return null;
+
+    for (const part of header.split(";")) {
+        const separatorIndex = part.indexOf("=");
+        if (separatorIndex === -1) continue;
+
+        const name = part.slice(0, separatorIndex).trim();
+        if (name !== SESSION_COOKIE_NAME) continue;
+
+        return decodeURIComponent(part.slice(separatorIndex + 1).trim());
+    }
+
+    return null;
+}
