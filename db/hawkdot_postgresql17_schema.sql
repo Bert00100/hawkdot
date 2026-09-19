@@ -937,12 +937,31 @@ AS $function$
     )
 $function$;
 
+-- Lookup de login por e-mail (issue #12, M3). No momento do login ainda nao
+-- existe hawkdot.current_user_id definido -- a policy users_self_select
+-- (id = current_user_id()) bloquearia qualquer busca por e-mail. Esta funcao
+-- roda com SECURITY DEFINER e row_security desligado, e devolve so o minimo
+-- necessario para autenticar: nunca dados de perfil do usuario.
+CREATE FUNCTION hawkdot_private.find_login_credentials(p_email citext)
+RETURNS TABLE (id uuid, password_hash text, status hawkdot.user_status)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, hawkdot
+SET row_security = off
+AS $function$
+    SELECT u.id, u.password_hash, u.status
+    FROM hawkdot.users AS u
+    WHERE u.email = p_email
+$function$;
+
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA hawkdot_private FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION hawkdot_private.current_user_id() TO hawkdot_app;
 GRANT EXECUTE ON FUNCTION hawkdot_private.current_organization_id() TO hawkdot_app, hawkdot_worker;
 GRANT EXECUTE ON FUNCTION hawkdot_private.is_organization_member(uuid) TO hawkdot_app;
 GRANT EXECUTE ON FUNCTION hawkdot_private.has_organization_role(uuid, hawkdot.member_role[]) TO hawkdot_app;
 GRANT EXECUTE ON FUNCTION hawkdot_private.organization_has_members(uuid) TO hawkdot_app;
+GRANT EXECUTE ON FUNCTION hawkdot_private.find_login_credentials(citext) TO hawkdot_app;
 
 -- ---------------------------------------------------------------------------
 -- Row-Level Security
