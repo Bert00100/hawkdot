@@ -47,3 +47,37 @@ export async function findActiveOrganizationMemberships(
         SELECT * FROM hawkdot_private.find_active_organization_memberships(${userId}::uuid)
     `;
 }
+
+export type OrganizationMemberListItem = {
+    user_id: string;
+    email: string;
+    display_name: string;
+    role: "owner" | "admin" | "operator" | "viewer";
+    status: "active" | "invited" | "suspended";
+    joined_at: Date | null;
+    invited_by: string | null;
+    created_at: Date;
+};
+
+// Roda DENTRO de withTenant() (organization_id ja no contexto). Mesmo
+// motivo da #17: users_self_select so mostra o proprio usuario, entao um
+// JOIN comum dentro do tx nao traria nome/e-mail dos outros membros. A
+// funcao SECURITY DEFINER usa current_organization_id() por dentro e
+// reconfirma is_organization_member() -- nao aceita organization_id vindo
+// do cliente.
+export async function listOrganizationMembers(
+    tx: TenantClient,
+    pagination: { limit: number; offset: number },
+): Promise<OrganizationMemberListItem[]> {
+    return tx.$queryRaw<OrganizationMemberListItem[]>`
+        SELECT * FROM hawkdot_private.list_organization_members(${pagination.limit}, ${pagination.offset})
+    `;
+}
+
+export async function countOrganizationMembers(tx: TenantClient): Promise<number> {
+    const rows = await tx.$queryRaw<{ count: bigint }[]>`
+        SELECT hawkdot_private.count_organization_members() AS count
+    `;
+
+    return Number(rows[0]?.count ?? 0);
+}

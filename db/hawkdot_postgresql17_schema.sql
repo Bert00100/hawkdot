@@ -998,6 +998,74 @@ $function$;
 
 GRANT EXECUTE ON FUNCTION hawkdot_private.find_active_organization_memberships(uuid) TO hawkdot_app;
 
+-- Listagem de membros da organizacao ativa, com nome/e-mail do usuario
+-- (issue #22). users_self_select so permite ao usuario ver A SI MESMO --
+-- um JOIN comum dentro do tx nunca traria nome/email dos outros membros.
+-- Mesmo padrao das funcoes anteriores: SECURITY DEFINER, row_security off.
+-- Diferente delas, esta NAO recebe organization_id por parametro -- usa
+-- current_organization_id() diretamente e reconfirma is_organization_member()
+-- por dentro, para que so funcione quando chamada de dentro de um
+-- withTenant() com a organizacao certa ja definida (nunca um id arbitrario
+-- vindo do cliente).
+CREATE FUNCTION hawkdot_private.list_organization_members(p_limit integer DEFAULT 20, p_offset integer DEFAULT 0)
+RETURNS TABLE (
+    user_id uuid,
+    email citext,
+    display_name text,
+    role hawkdot.member_role,
+    status hawkdot.member_status,
+    joined_at timestamptz,
+    invited_by uuid,
+    created_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, hawkdot
+SET row_security = off
+AS $function$
+    SELECT u.id, u.email, u.display_name, m.role, m.status, m.joined_at, m.invited_by, m.created_at
+    FROM hawkdot.organization_members AS m
+    JOIN hawkdot.users AS u ON u.id = m.user_id
+    WHERE m.organization_id = hawkdot_private.current_organization_id()
+      AND hawkdot_private.is_organization_member(hawkdot_private.current_organization_id())
+    ORDER BY m.created_at ASC
+    LIMIT p_limit OFFSET p_offset
+$function$;
+
+CREATE FUNCTION hawkdot_private.count_organization_members()
+RETURNS bigint
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, hawkdot
+SET row_security = off
+AS $function$
+    SELECT count(*)
+    FROM hawkdot.organization_members AS m
+    WHERE m.organization_id = hawkdot_private.current_organization_id()
+      AND hawkdot_private.is_organization_member(hawkdot_private.current_organization_id())
+$function$;
+
+GRANT EXECUTE ON FUNCTION hawkdot_private.list_organization_members(integer, integer) TO hawkdot_app;
+GRANT EXECUTE ON FUNCTION hawkdot_private.count_organization_members() TO hawkdot_app;
+
+-- Lookup de user_id por e-mail para convite de membro (issue #23).
+-- members_insert so precisa do user_id do convidado -- devolve so isso,
+-- nunca password_hash ou outro dado do usuario alheio.
+CREATE FUNCTION hawkdot_private.find_user_id_by_email(p_email citext)
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, hawkdot
+SET row_security = off
+AS $function$
+    SELECT u.id FROM hawkdot.users AS u WHERE u.email = p_email
+$function$;
+
+GRANT EXECUTE ON FUNCTION hawkdot_private.find_user_id_by_email(citext) TO hawkdot_app;
+
 -- ---------------------------------------------------------------------------
 -- Row-Level Security
 -- ---------------------------------------------------------------------------
@@ -1092,6 +1160,27 @@ CREATE POLICY members_delete
             organization_id,
             ARRAY['owner', 'admin']::hawkdot.member_role[]
         )
+    );
+
+-- Permite ao proprio convidado aceitar o convite (issue #24): members_update
+-- exige owner/admin do ATOR, mas quem aceita ainda nao tem papel nenhum.
+-- Policy adicional e permissiva (combinada com members_update via OR):
+-- so deixa o usuario alterar a PROPRIA linha, e so quando ela esta
+-- 'invited' virando 'active'. Residual conhecido: a policy em si nao
+-- impede a mesma UPDATE de tambem mudar `role` -- quem fecha essa porta e a
+-- camada de aplicacao (o controller de aceite nunca inclui `role` no
+-- payload do update). Documentado em AGENTS.md.
+CREATE POLICY members_self_accept_invite
+    ON hawkdot.organization_members FOR UPDATE TO hawkdot_app
+    USING (
+        organization_id = hawkdot_private.current_organization_id()
+        AND user_id = hawkdot_private.current_user_id()
+        AND status = 'invited'::hawkdot.member_status
+    )
+    WITH CHECK (
+        organization_id = hawkdot_private.current_organization_id()
+        AND user_id = hawkdot_private.current_user_id()
+        AND status = 'active'::hawkdot.member_status
     );
 
 DO $tenant_rls$
