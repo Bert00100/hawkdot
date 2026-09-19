@@ -1463,10 +1463,12 @@ TO hawkdot_app;
 -- withTenant() do usuario/organizacao dona do evento -- o worker
 -- (hawkdot_worker) nao tem GRANT em notification_rules/notification_channels
 -- de proposito (#38: so emite eventos), entao quem casa evento -> regra ->
--- canal e cria a entrega tem que ser o role da API. UPDATE fica de fora --
--- a mudanca de status (pending -> sent/failed) e responsabilidade do
--- adapter de entrega (#42), nao desta grant.
-GRANT SELECT, INSERT ON hawkdot.notification_deliveries TO hawkdot_app;
+-- canal e cria a entrega tem que ser o role da API.
+-- #42: UPDATE adicionado aqui (nao so INSERT) porque o adapter de entrega
+-- roda no mesmo role e precisa gravar status/attempt_count/last_error/
+-- sent_at apos cada tentativa -- sem tabela/role dedicado para o envio em
+-- si, mesmo raciocinio do motor de entrega.
+GRANT SELECT, INSERT, UPDATE ON hawkdot.notification_deliveries TO hawkdot_app;
 
 GRANT SELECT, UPDATE ON hawkdot.incidents TO hawkdot_app;
 GRANT SELECT, INSERT ON hawkdot.audit_logs TO hawkdot_app;

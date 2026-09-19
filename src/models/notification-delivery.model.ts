@@ -121,3 +121,86 @@ export function createDeliveries(tx: TenantClient, deliveries: CreateDeliveryDat
         skipDuplicates: true,
     });
 }
+
+export type DispatchableDelivery = {
+    id: string;
+    channel_id: string;
+    attempt_count: number;
+    channel_type: string;
+    channel_credential_id: string | null;
+    channel_safe_config: unknown;
+};
+
+// Usa o mesmo criterio do indice parcial notification_deliveries_pending_idx
+// (status IN pending/failed) + attempt_count < 20 (CHECK
+// notification_attempt_count permite ate 20; parar antes evita estourar a
+// constraint) + next_attempt_at vencido ou nulo (primeira tentativa).
+export function findDispatchableDeliveries(
+    tx: TenantClient,
+    organizationId: string,
+    limit: number,
+): Promise<DispatchableDelivery[]> {
+    return tx.notification_deliveries
+        .findMany({
+            where: {
+                organization_id: organizationId,
+                status: { in: ["pending", "failed"] },
+                attempt_count: { lt: 20 },
+                OR: [{ next_attempt_at: null }, { next_attempt_at: { lte: new Date() } }],
+            },
+            orderBy: { next_attempt_at: "asc" },
+            take: limit,
+            select: {
+                id: true,
+                channel_id: true,
+                attempt_count: true,
+                notification_channels: {
+                    select: { channel_type: true, credential_id: true, safe_config: true },
+                },
+            },
+        })
+        .then((rows) =>
+            rows.map((row) => ({
+                id: row.id,
+                channel_id: row.channel_id,
+                attempt_count: row.attempt_count,
+                channel_type: row.notification_channels.channel_type,
+                channel_credential_id: row.notification_channels.credential_id,
+                channel_safe_config: row.notification_channels.safe_config,
+            })),
+        );
+}
+
+export function markDeliverySent(tx: TenantClient, id: string, providerMessageId: string | undefined) {
+    return tx.notification_deliveries.update({
+        where: { id },
+        data: {
+            status: "sent",
+            sent_at: new Date(),
+            provider_message_id: providerMessageId,
+            last_error: null,
+            next_attempt_at: null,
+        },
+    });
+}
+
+// notification_attempt_count CHECK permite 0..20 -- ao chegar em 20,
+// paramos de agendar retry (next_attempt_at null) em vez de deixar o
+// proximo increment estourar a constraint.
+export function markDeliveryFailed(
+    tx: TenantClient,
+    id: string,
+    attemptCount: number,
+    lastError: string,
+    nextAttemptAt: Date | null,
+) {
+    return tx.notification_deliveries.update({
+        where: { id },
+        data: {
+            status: "failed",
+            attempt_count: attemptCount,
+            last_error: lastError,
+            next_attempt_at: nextAttemptAt,
+        },
+    });
+}
