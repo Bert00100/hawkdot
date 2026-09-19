@@ -23,3 +23,9 @@ export const inviteMemberSchema = z.object({
 });
 
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
+
+export const acceptInviteSchema = z.object({
+    organization_id: dto.uuid,
+});
+
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;

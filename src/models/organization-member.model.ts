@@ -104,3 +104,28 @@ export function createInvite(
         },
     });
 }
+
+export type AcceptedInvite = {
+    organization_id: string;
+    role: MemberRole;
+    status: "active";
+    joined_at: Date;
+};
+
+// So roda dentro de withTenant() com o CONVIDADO como current_user_id (nao
+// precisa ser membro ativo da organizacao ainda -- e o proprio ponto). Usa
+// a funcao SECURITY DEFINER hawkdot_private.accept_own_invite, que ignora
+// RLS por completo para esta operacao -- ver o comentario extenso no
+// schema.sql sobre por que uma policy adicional nao funciona aqui (Postgres
+// exige a linha visivel por uma policy de SELECT tambem para UPDATE, nao so
+// a policy de UPDATE em si).
+export async function acceptOwnInvite(
+    tx: TenantClient,
+    organizationId: string,
+): Promise<AcceptedInvite | null> {
+    const rows = await tx.$queryRaw<AcceptedInvite[]>`
+        SELECT * FROM hawkdot_private.accept_own_invite(${organizationId}::uuid)
+    `;
+
+    return rows[0] ?? null;
+}

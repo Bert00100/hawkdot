@@ -1066,6 +1066,46 @@ $function$;
 
 GRANT EXECUTE ON FUNCTION hawkdot_private.find_user_id_by_email(citext) TO hawkdot_app;
 
+-- Aceite do proprio convite (issue #24): members_update exige owner/admin
+-- do ATOR, mas quem aceita ainda nao tem papel nenhum -- o terceiro
+-- conflito desse tipo na milestone (depois do login e do /me).
+--
+-- Uma policy adicional permitindo a propria transicao invited->active FOI
+-- tentada primeiro e NAO funciona: Postgres exige, para UPDATE/DELETE, que a
+-- linha tambem passe por uma policy de SELECT (implicitamente ANDada as
+-- policies de UPDATE, nao so OR'd entre si) -- confirmado com EXPLAIN
+-- contra o banco real, que mostrou hawkdot_private.is_organization_member(...)
+-- aparecendo no filtro mesmo com uma policy de UPDATE dedicada. E exatamente
+-- essa condicao que ainda nao vale nesse momento (o convite ainda esta
+-- 'invited'), entao a linha nunca fica visivel o suficiente para a propria
+-- UPDATE -- o mesmo tipo de vazio circular do bootstrap do signup, só que
+-- surgindo de um mecanismo do Postgres nao documentado nos outros
+-- comentarios deste arquivo.
+--
+-- Solucao: SECURITY DEFINER com row_security off, no mesmo padrao das
+-- outras funcoes desta secao -- ignora RLS por completo para esta unica
+-- operacao. Usa current_user_id() por dentro (nao um parametro), entao so
+-- pode aceitar o proprio convite de quem esta chamando: nao ha como
+-- falsificar aceitando em nome de outro usuario. Devolve zero linhas se o
+-- convite nao existir, nao pertencer ao usuario, ou ja nao estiver mais
+-- 'invited' -- a aplicacao trata isso como 404.
+CREATE FUNCTION hawkdot_private.accept_own_invite(p_organization_id uuid)
+RETURNS TABLE (organization_id uuid, role hawkdot.member_role, status hawkdot.member_status, joined_at timestamptz)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, hawkdot
+SET row_security = off
+AS $function$
+    UPDATE hawkdot.organization_members
+    SET status = 'active', joined_at = now()
+    WHERE organization_id = p_organization_id
+      AND user_id = hawkdot_private.current_user_id()
+      AND status = 'invited'::hawkdot.member_status
+    RETURNING organization_id, role, status, joined_at
+$function$;
+
+GRANT EXECUTE ON FUNCTION hawkdot_private.accept_own_invite(uuid) TO hawkdot_app;
+
 -- ---------------------------------------------------------------------------
 -- Row-Level Security
 -- ---------------------------------------------------------------------------
@@ -1160,27 +1200,6 @@ CREATE POLICY members_delete
             organization_id,
             ARRAY['owner', 'admin']::hawkdot.member_role[]
         )
-    );
-
--- Permite ao proprio convidado aceitar o convite (issue #24): members_update
--- exige owner/admin do ATOR, mas quem aceita ainda nao tem papel nenhum.
--- Policy adicional e permissiva (combinada com members_update via OR):
--- so deixa o usuario alterar a PROPRIA linha, e so quando ela esta
--- 'invited' virando 'active'. Residual conhecido: a policy em si nao
--- impede a mesma UPDATE de tambem mudar `role` -- quem fecha essa porta e a
--- camada de aplicacao (o controller de aceite nunca inclui `role` no
--- payload do update). Documentado em AGENTS.md.
-CREATE POLICY members_self_accept_invite
-    ON hawkdot.organization_members FOR UPDATE TO hawkdot_app
-    USING (
-        organization_id = hawkdot_private.current_organization_id()
-        AND user_id = hawkdot_private.current_user_id()
-        AND status = 'invited'::hawkdot.member_status
-    )
-    WITH CHECK (
-        organization_id = hawkdot_private.current_organization_id()
-        AND user_id = hawkdot_private.current_user_id()
-        AND status = 'active'::hawkdot.member_status
     );
 
 DO $tenant_rls$

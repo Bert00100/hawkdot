@@ -2,10 +2,12 @@ import type { TenantClient } from "@/lib/tenant/with-tenant";
 import type { Session } from "@/lib/auth/require-session";
 import type { Paginacao } from "@/lib/dto/common";
 import {
+    acceptOwnInvite,
     countOrganizationMembers,
     createInvite,
     listOrganizationMembers,
 } from "@/models/organization-member.model";
+import { withTenant } from "@/lib/tenant/with-tenant";
 import { findUserIdByEmail } from "@/models/user.model";
 import { requireRole } from "@/lib/auth/require-role";
 import { notFound } from "@/lib/errors";
@@ -89,4 +91,31 @@ export async function inviteMember(
     });
 
     return { user_id: membership.user_id, role: membership.role, status: membership.status };
+}
+
+export type AcceptInviteResult = {
+    organization_id: string;
+    role: string;
+    status: string;
+};
+
+// Nao usa withSession: o convite pode ser para uma organizacao DIFERENTE da
+// organizacao ativa atual do usuario (o JWT pode nem ter sido emitido para
+// essa organizacao ainda -- e justamente o caso comum de um convite novo).
+// getSession() so confirma quem e o usuario; withTenant() abre o contexto
+// para a organizacao ALVO do convite, nao a da sessao.
+export async function acceptInvite(userId: string, organizationId: string): Promise<AcceptInviteResult> {
+    const membership = await withTenant({ userId, organizationId }, (tx) =>
+        acceptOwnInvite(tx, organizationId),
+    );
+
+    if (!membership) {
+        throw notFound("Convite");
+    }
+
+    return {
+        organization_id: membership.organization_id,
+        role: membership.role,
+        status: membership.status,
+    };
 }
