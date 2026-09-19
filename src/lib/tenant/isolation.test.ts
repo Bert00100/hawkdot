@@ -70,12 +70,12 @@ describe("isolamento entre tenants", () => {
         ).rejects.toThrow();
     });
 
-    it("sem contexto de tenant, a leitura retorna vazio", async () => {
+    it("sem contexto de tenant (client guardado fora do wrapper), a query lanca erro em vez de voltar vazia", async () => {
         await createResource((await createFullTenant()).organization.id);
 
-        const resultado = await prisma.resources.findMany();
-
-        expect(resultado).toEqual([]);
+        await expect(prisma.resources.findMany()).rejects.toThrow(
+            /resources\.findMany[\s\S]*fora de withTenant/,
+        );
     });
 
     it("membro viewer nao consegue inserir (tenant_app_insert exige owner/admin/operator)", async () => {

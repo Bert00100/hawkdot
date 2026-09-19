@@ -28,14 +28,12 @@ describe("withTenant", () => {
         expect(encontrada?.id).toBe(organization.id);
     });
 
-    it("a mesma leitura fora do wrapper volta vazia (RLS filtra silenciosamente)", async () => {
+    it("usar o client `prisma` guardado fora do wrapper lanca erro nomeado (#10), nao volta vazio silenciosamente", async () => {
         const { organization } = await createFullTenant();
 
-        const semContexto = await prisma.organizations.findUnique({
-            where: { id: organization.id },
-        });
-
-        expect(semContexto).toBeNull();
+        await expect(
+            prisma.organizations.findUnique({ where: { id: organization.id } }),
+        ).rejects.toThrow(/organizations\.findUnique[\s\S]*fora de withTenant/);
     });
 
     it("nao enxerga dados de outra organizacao", async () => {

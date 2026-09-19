@@ -1,5 +1,4 @@
-import { Prisma } from "@/generated/prisma/client";
-import prisma from "@/config/database";
+import { basePrisma } from "@/config/database";
 
 // Toda tabela de negocio tem policies de RLS que filtram por
 // hawkdot_private.current_organization_id(), que le
@@ -12,11 +11,12 @@ import prisma from "@/config/database";
 // ($transaction interativo), nunca numa conexao solta do pool. Se fosse
 // `false`, o valor vazaria para a proxima request que reusasse a mesma
 // conexao: um tenant leria dados de outro.
-
-export type TenantClient = Omit<
-    Prisma.TransactionClient,
-    "$transaction" | "$connect" | "$disconnect" | "$extends"
->;
+//
+// withTenant abre a transacao a partir de `basePrisma` (sem a guarda de
+// contexto do #10) -- o `tx` que o callback recebe roda normalmente depois do
+// set_config. Ver src/lib/tenant/guard.ts para o porque de nao usar o
+// `prisma` guardado (default export de config/database) aqui.
+export type TenantClient = Parameters<Parameters<typeof basePrisma.$transaction>[0]>[0];
 
 export type TenantContext = {
     userId: string;
@@ -28,13 +28,14 @@ export type TenantContext = {
 // Unico ponto de entrada para query de negocio. O client que o callback
 // recebe SO existe dentro desta transacao, com o contexto ja definido -- por
 // isso models de recurso devem sempre receber esse client como parametro, e
-// nunca importar o `prisma` singleton diretamente (exceto health.model e o
-// lookup de login da M3, que rodam antes de haver contexto de usuario).
+// nunca importar `prisma` (default export guardado) para operacao de
+// modelo -- so health.model e o lookup de login da M3 usam esse default
+// export, e so para $queryRaw/$executeRaw.
 export async function withTenant<T>(
     context: TenantContext,
     callback: (tx: TenantClient) => Promise<T>,
 ): Promise<T> {
-    return prisma.$transaction(async (tx) => {
+    return basePrisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT set_config('hawkdot.current_user_id', ${context.userId}, true)`;
 
         if (context.organizationId) {
