@@ -1,4 +1,6 @@
-import { signup } from "@/controllers/auth.controller";
+import { login, signup } from "@/controllers/auth.controller";
+import { verifySessionToken } from "@/lib/auth/jwt";
+import * as passwordModule from "@/lib/auth/password";
 import { verifyPassword } from "@/lib/auth/password";
 import { findLoginCredentials } from "@/models/user.model";
 import { basePrisma } from "@/config/database";
@@ -89,5 +91,124 @@ describe("signup", () => {
             where: { email: validInput.email },
         });
         expect(usuarioOrfao).toBeNull();
+    });
+});
+
+describe("login", () => {
+    const signupParaLogin = (overrides: Partial<typeof validInput> = {}) =>
+        signup({ ...validInput, ...overrides });
+
+    it("credenciais validas devolvem token e os dados do usuario", async () => {
+        const cadastro = await signupParaLogin();
+
+        const resultado = await login({ email: validInput.email, password: validInput.password });
+
+        expect(resultado.token).toEqual(expect.any(String));
+        expect(resultado.user.id).toBe(cadastro.user.id);
+        expect(resultado.organization_id).toBe(cadastro.organization.id);
+    });
+
+    it("nao devolve password_hash na resposta", async () => {
+        await signupParaLogin();
+
+        const resultado = await login({ email: validInput.email, password: validInput.password });
+
+        expect(resultado.user).not.toHaveProperty("password_hash");
+    });
+
+    it("o token carrega user_id e organization_id", async () => {
+        const cadastro = await signupParaLogin();
+
+        const resultado = await login({ email: validInput.email, password: validInput.password });
+        const payload = await verifySessionToken(resultado.token);
+
+        expect(payload).toEqual({
+            user_id: cadastro.user.id,
+            organization_id: cadastro.organization.id,
+        });
+    });
+
+    it("atualiza last_login_at", async () => {
+        const cadastro = await signupParaLogin();
+
+        await login({ email: validInput.email, password: validInput.password });
+
+        const user = await adminClient.users.findUnique({ where: { id: cadastro.user.id } });
+        expect(user?.last_login_at).not.toBeNull();
+    });
+
+    it("senha errada e email inexistente devolvem exatamente a mesma resposta 401", async () => {
+        await signupParaLogin();
+
+        const senhaErrada = await login({ email: validInput.email, password: "senha-errada-000" }).catch(
+            (e) => e,
+        );
+        const emailInexistente = await login({
+            email: "nao-existe@teste.hawkdot",
+            password: "qualquer-coisa-123",
+        }).catch((e) => e);
+
+        expect(errorResponse(senhaErrada).status).toBe(401);
+        expect(errorResponse(emailInexistente).status).toBe(401);
+        await expect(errorResponse(senhaErrada).json()).resolves.toEqual(
+            await errorResponse(emailInexistente).json(),
+        );
+    });
+
+    it("usuario com status disabled nao consegue logar (mesma resposta 401)", async () => {
+        const cadastro = await signupParaLogin();
+        await adminClient.users.update({ where: { id: cadastro.user.id }, data: { status: "disabled" } });
+
+        const erro = await login({ email: validInput.email, password: validInput.password }).catch(
+            (e) => e,
+        );
+
+        expect(errorResponse(erro).status).toBe(401);
+    });
+
+    it("faz o trabalho de hash mesmo quando o e-mail nao existe (resistencia a timing attack)", async () => {
+        await signupParaLogin();
+
+        // Nao mockamos verifyPassword: o ponto do teste e provar que o
+        // trabalho de CPU do argon2id realmente roda nos dois casos. Um bug
+        // tipico aqui e um "if (!credentials) throw" antes de chamar
+        // verifyPassword, que tornaria o caminho de e-mail inexistente quase
+        // instantaneo -- exatamente o que revelaria a existencia da conta
+        // pelo tempo de resposta. Medimos que ambos os caminhos levam um
+        // tempo compativel com um hash real (nao um retorno adiantado).
+        const medir = async (input: { email: string; password: string }) => {
+            const inicio = performance.now();
+            await login(input).catch(() => {});
+            return performance.now() - inicio;
+        };
+
+        const duracaoSenhaErrada = await medir({
+            email: validInput.email,
+            password: "senha-errada-000",
+        });
+        const duracaoEmailInexistente = await medir({
+            email: "nao-existe@teste.hawkdot",
+            password: "qualquer-coisa-123",
+        });
+
+        // Verificacao real de argon2id (OWASP m=19MiB/t=2) fica na casa de
+        // dezenas de ms -- um early-return ficaria abaixo de ~1ms.
+        expect(duracaoSenhaErrada).toBeGreaterThan(3);
+        expect(duracaoEmailInexistente).toBeGreaterThan(3);
+    });
+
+    it("usuario sem nenhuma organizacao ativa (estado defensivo) nao consegue logar", async () => {
+        const { hashPassword } = passwordModule;
+        const hash = await hashPassword(validInput.password);
+        const usuarioOrfao = await adminClient.users.create({
+            data: { email: "orfao@teste.hawkdot", password_hash: hash, display_name: "Orfao" },
+        });
+
+        const erro = await login({ email: "orfao@teste.hawkdot", password: validInput.password }).catch(
+            (e) => e,
+        );
+
+        expect(errorResponse(erro).status).toBe(500);
+        expect(usuarioOrfao.id).toEqual(expect.any(String));
     });
 });

@@ -4,6 +4,7 @@ import { parseEnv } from "@/config/env";
 const validEnv = {
     NODE_ENV: "development",
     DATABASE_URL: "postgresql://hawkdot_api_login:senha@localhost:5432/hawkdot",
+    JWT_SECRET: "segredo-de-teste-com-mais-de-32-caracteres",
 };
 
 describe("parseEnv", () => {
@@ -15,7 +16,8 @@ describe("parseEnv", () => {
     });
 
     it("assume development quando NODE_ENV nao e informado", () => {
-        const env = parseEnv({ DATABASE_URL: validEnv.DATABASE_URL });
+        const { NODE_ENV, ...semNodeEnv } = validEnv;
+        const env = parseEnv(semNodeEnv);
 
         expect(env.NODE_ENV).toBe("development");
     });
@@ -63,8 +65,8 @@ describe("parseEnv", () => {
 
     describe("ambiente de teste", () => {
         const testEnv = {
+            ...validEnv,
             NODE_ENV: "test",
-            DATABASE_URL: validEnv.DATABASE_URL,
             DATABASE_URL_TEST: "postgresql://hawkdot_api_login:senha@localhost:5432/hawkdot_test",
             DATABASE_URL_TEST_ADMIN: "postgresql://adm:senha@localhost:5432/hawkdot_test",
         };
@@ -90,6 +92,40 @@ describe("parseEnv", () => {
 
         it("nao exige as URLs de teste fora do ambiente de teste", () => {
             expect(() => parseEnv(validEnv)).not.toThrow();
+        });
+    });
+
+    describe("JWT_SECRET", () => {
+        it("e obrigatorio -- nao tem valor padrao no codigo", () => {
+            const { JWT_SECRET, ...semSegredo } = validEnv;
+
+            expect(() => parseEnv(semSegredo)).toThrow(/JWT_SECRET/);
+        });
+
+        it("recusa segredo com menos de 32 caracteres", () => {
+            expect(() => parseEnv({ ...validEnv, JWT_SECRET: "curto-demais" })).toThrow(
+                /JWT_SECRET/,
+            );
+        });
+    });
+
+    describe("JWT_TTL_SECONDS", () => {
+        it("assume 3600 quando nao informado", () => {
+            const env = parseEnv(validEnv);
+
+            expect(env.JWT_TTL_SECONDS).toBe(3600);
+        });
+
+        it("aceita um valor customizado", () => {
+            const env = parseEnv({ ...validEnv, JWT_TTL_SECONDS: "900" });
+
+            expect(env.JWT_TTL_SECONDS).toBe(900);
+        });
+
+        it("recusa valor nao positivo", () => {
+            expect(() => parseEnv({ ...validEnv, JWT_TTL_SECONDS: "0" })).toThrow(
+                /JWT_TTL_SECONDS/,
+            );
         });
     });
 

@@ -35,12 +35,16 @@ const envSchema = z
         DATABASE_URL_TEST: postgresUrl.optional(),
         DATABASE_URL_TEST_ADMIN: postgresUrl.optional(),
 
-        // Preparadas para as milestones seguintes. Continuam opcionais enquanto
-        // as features nao existem; quando M3/M7 chegarem, movem-se para o
-        // superRefine como obrigatorias no ambiente correspondente.
-        // M3 - Autenticacao: segredo de assinatura do JWT.
-        JWT_SECRET: z.string().min(32, "precisa ter ao menos 32 caracteres").optional(),
-        JWT_TTL_SECONDS: z.coerce.number().int().positive().optional(),
+        // M3 - Autenticacao (#15): segredo de assinatura do JWT de sessao.
+        // Sem default no codigo de proposito -- se faltar, o boot falha
+        // explicitamente em vez de assinar token com segredo previsivel.
+        JWT_SECRET: z.string().min(32, "precisa ter ao menos 32 caracteres"),
+        // TTL curto: sem tabela de sessions, nao ha revogacao imediata.
+        JWT_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
+
+        // Preparada para a M7. Continua opcional enquanto a feature nao
+        // existe; quando a M7 chegar, move-se para obrigatoria no ambiente
+        // correspondente.
         // M7 - Notificacoes: credenciais dos canais de entrega.
         TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
     })

@@ -963,6 +963,30 @@ GRANT EXECUTE ON FUNCTION hawkdot_private.has_organization_role(uuid, hawkdot.me
 GRANT EXECUTE ON FUNCTION hawkdot_private.organization_has_members(uuid) TO hawkdot_app;
 GRANT EXECUTE ON FUNCTION hawkdot_private.find_login_credentials(citext) TO hawkdot_app;
 
+-- Lookup das organizacoes ativas do usuario (issue #15, reaproveitada no
+-- #17 /me). members_select exige organization_id = current_organization_id()
+-- -- ou seja, so enxerga membership de uma org que a aplicacao ja saiba de
+-- antemao. No login, e exatamente o organization_id que ainda nao se sabe
+-- (e o que esta funcao existe para descobrir); no /me, o objetivo e listar
+-- TODAS as organizacoes do usuario, nao so a ativa. Mesmo padrao da #12:
+-- SECURITY DEFINER, row_security off, devolve o minimo necessario.
+CREATE FUNCTION hawkdot_private.find_active_organization_memberships(p_user_id uuid)
+RETURNS TABLE (organization_id uuid, role hawkdot.member_role, joined_at timestamptz)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, hawkdot
+SET row_security = off
+AS $function$
+    SELECT m.organization_id, m.role, m.joined_at
+    FROM hawkdot.organization_members AS m
+    WHERE m.user_id = p_user_id
+      AND m.status = 'active'::hawkdot.member_status
+    ORDER BY m.joined_at ASC
+$function$;
+
+GRANT EXECUTE ON FUNCTION hawkdot_private.find_active_organization_memberships(uuid) TO hawkdot_app;
+
 -- ---------------------------------------------------------------------------
 -- Row-Level Security
 -- ---------------------------------------------------------------------------

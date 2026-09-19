@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { withTenant } from "@/lib/tenant/with-tenant";
-import { hashPassword } from "@/lib/auth/password";
-import { createUserRecord } from "@/models/user.model";
+import { dummyPasswordHash, hashPassword, verifyPassword } from "@/lib/auth/password";
+import { signSessionToken } from "@/lib/auth/jwt";
+import { createUserRecord, findLoginCredentials } from "@/models/user.model";
 import { createOrganizationRecord, findOrganizationById } from "@/models/organization.model";
-import { createOwnerMembership } from "@/models/organization-member.model";
-import type { SignupInput } from "@/lib/dto/auth.dto";
+import {
+    createOwnerMembership,
+    findActiveOrganizationMemberships,
+} from "@/models/organization-member.model";
+import { unauthenticated, internalError } from "@/lib/errors";
+import type { LoginInput, SignupInput } from "@/lib/dto/auth.dto";
 
 export type SignupResult = {
     user: { id: string; email: string; display_name: string };
@@ -64,4 +69,55 @@ export async function signup(input: SignupInput): Promise<SignupResult> {
             },
         };
     });
+}
+
+export type LoginResult = {
+    token: string;
+    user: { id: string; email: string; display_name: string };
+    organization_id: string;
+};
+
+// Credencial invalida devolve sempre a MESMA mensagem generica -- nao
+// distingue e-mail inexistente, senha errada ou conta desabilitada, para nao
+// vazar qual dessas e o caso. Por isso verifyPassword roda incondicionalmente
+// (contra o hash real ou contra dummyPasswordHash() quando o e-mail nao
+// existe): o tempo de resposta e semelhante nos dois casos, e nao revela se
+// a conta existe.
+export async function login(input: LoginInput): Promise<LoginResult> {
+    const credentials = await findLoginCredentials(input.email);
+
+    const passwordHash = credentials?.password_hash ?? (await dummyPasswordHash());
+    const passwordOk = await verifyPassword(input.password, passwordHash);
+
+    if (!credentials || !passwordOk || credentials.status === "disabled") {
+        throw unauthenticated("Email ou senha invalidos.");
+    }
+
+    const memberships = await findActiveOrganizationMemberships(credentials.id);
+    const organizationId = memberships[0]?.organization_id;
+
+    if (!organizationId) {
+        // Nao deveria ser alcancavel: o signup (#14) sempre cria a primeira
+        // organizacao do usuario na mesma transacao.
+        throw internalError("Usuario sem organizacao ativa.");
+    }
+
+    const token = await signSessionToken({ user_id: credentials.id, organization_id: organizationId });
+
+    // users_self_update (id = current_user_id()) nao depende de
+    // organization_id estar "certo" para este usuario -- current_user_id() e
+    // sempre o proprio id, sem o problema circular de organizations/
+    // organization_members no signup. RETURNING funciona normalmente aqui.
+    const user = await withTenant({ userId: credentials.id, organizationId }, (tx) =>
+        tx.users.update({
+            where: { id: credentials.id },
+            data: { last_login_at: new Date() },
+        }),
+    );
+
+    return {
+        token,
+        user: { id: user.id, email: user.email, display_name: user.display_name },
+        organization_id: organizationId,
+    };
 }
