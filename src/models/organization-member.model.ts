@@ -129,3 +129,33 @@ export async function acceptOwnInvite(
 
     return rows[0] ?? null;
 }
+
+export function findMembership(tx: TenantClient, organizationId: string, userId: string) {
+    return tx.organization_members.findUnique({
+        where: { organization_id_user_id: { organization_id: organizationId, user_id: userId } },
+    });
+}
+
+export function countActiveOwners(tx: TenantClient, organizationId: string): Promise<number> {
+    return tx.organization_members.count({
+        where: { organization_id: organizationId, role: "owner", status: "active" },
+    });
+}
+
+export function updateMemberRole(
+    tx: TenantClient,
+    organizationId: string,
+    userId: string,
+    role: MemberRole,
+) {
+    return tx.organization_members.update({
+        where: { organization_id_user_id: { organization_id: organizationId, user_id: userId } },
+        data: { role },
+    });
+}
+
+export function deleteMember(tx: TenantClient, organizationId: string, userId: string) {
+    return tx.organization_members.delete({
+        where: { organization_id_user_id: { organization_id: organizationId, user_id: userId } },
+    });
+}

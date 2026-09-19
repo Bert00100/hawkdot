@@ -29,3 +29,9 @@ export const acceptInviteSchema = z.object({
 });
 
 export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
+
+export const changeMemberRoleSchema = z.object({
+    role: dto.papel,
+});
+
+export type ChangeMemberRoleInput = z.infer<typeof changeMemberRoleSchema>;

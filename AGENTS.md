@@ -149,3 +149,7 @@ Confirmado com `EXPLAIN (VERBOSE, COSTS OFF)` contra o banco real: o Postgres in
 **Solução**: `hawkdot_private.accept_own_invite(organization_id)`, `SECURITY DEFINER` com `row_security = off` — mesmo padrão das outras funções desta seção. Ignora RLS por completo para essa operação específica; usa `current_user_id()` internamente (não um parâmetro), então só pode aceitar o próprio convite de quem chama.
 
 **Regra geral daqui pra frente**: se uma feature precisar de um `UPDATE`/`DELETE` que só deveria valer *antes* do usuário satisfazer a condição de `SELECT` da tabela (o mesmo padrão do bootstrap de tenant), não adianta tentar resolver com uma policy de `UPDATE`/`DELETE` adicional — vai esbarrar nessa mesma exigência implícita de `SELECT`. A saída é sempre uma função `SECURITY DEFINER` dedicada, como as demais desta lista.
+
+# Rotas dinâmicas exigem `next typegen`
+
+O helper `RouteContext<'/caminho/[param]'>` (usado para tipar o segundo argumento de rotas dinâmicas) só existe para as rotas que o Next já viu — o tipo é gerado, não vem do TypeScript puro. Depois de criar uma pasta com `[param]`, rode `npx next typegen` antes de `tsc --noEmit` (ou rode `npm run dev`/`next build` uma vez), senão o compilador acusa `Type '"/caminho/[param]"' does not satisfy the constraint '"/api/health"'` — o tipo antigo, gerado antes da rota nova existir.
