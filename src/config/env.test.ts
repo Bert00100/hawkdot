@@ -5,6 +5,7 @@ const validEnv = {
     NODE_ENV: "development",
     DATABASE_URL: "postgresql://hawkdot_api_login:senha@localhost:5432/hawkdot",
     JWT_SECRET: "segredo-de-teste-com-mais-de-32-caracteres",
+    CREDENTIAL_ENCRYPTION_KEY: "0".repeat(64),
 };
 
 describe("parseEnv", () => {
@@ -102,6 +103,26 @@ describe("parseEnv", () => {
 
         it("devolve DATABASE_URL_WORKER_TEST em NODE_ENV=test (ja setada no .env local)", () => {
             expect(workerDatabaseUrl()).toEqual(expect.stringContaining("hawkdot_worker_login"));
+        });
+    });
+
+    describe("CREDENTIAL_ENCRYPTION_KEY", () => {
+        it("e obrigatoria -- nao tem valor padrao no codigo", () => {
+            const { CREDENTIAL_ENCRYPTION_KEY, ...semChave } = validEnv;
+
+            expect(() => parseEnv(semChave)).toThrow(/CREDENTIAL_ENCRYPTION_KEY/);
+        });
+
+        it("recusa valor que nao tem exatamente 64 hex chars", () => {
+            expect(() =>
+                parseEnv({ ...validEnv, CREDENTIAL_ENCRYPTION_KEY: "curto-demais" }),
+            ).toThrow(/CREDENTIAL_ENCRYPTION_KEY/);
+        });
+
+        it("aceita maiusculas tambem (hex case-insensitive)", () => {
+            expect(() =>
+                parseEnv({ ...validEnv, CREDENTIAL_ENCRYPTION_KEY: "A".repeat(64) }),
+            ).not.toThrow();
         });
     });
 

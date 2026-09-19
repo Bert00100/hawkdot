@@ -50,11 +50,20 @@ const envSchema = z
         DATABASE_URL_WORKER: postgresUrl.optional(),
         DATABASE_URL_WORKER_TEST: postgresUrl.optional(),
 
-        // Preparada para a M7. Continua opcional enquanto a feature nao
-        // existe; quando a M7 chegar, move-se para obrigatoria no ambiente
-        // correspondente.
-        // M7 - Notificacoes: credenciais dos canais de entrega.
-        TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+        // M7 - Notificacoes (#39): chave mestra para cifrar segredos de
+        // credenciais (AES-256-GCM) antes de gravar em
+        // hawkdot.credentials.encrypted_secret -- a chave em si NUNCA fica
+        // no banco (comentario explicito no schema.sql). 64 caracteres hex
+        // = 32 bytes, exigido pelo AES-256. Sem default no codigo, mesmo
+        // raciocinio do JWT_SECRET.
+        //
+        // Nao existe um TELEGRAM_BOT_TOKEN global: cada canal Telegram
+        // referencia sua propria credencial (organizacoes diferentes podem
+        // usar bots diferentes) -- o token fica cifrado por linha em
+        // `credentials`, nunca solto no ambiente.
+        CREDENTIAL_ENCRYPTION_KEY: z
+            .string()
+            .regex(/^[0-9a-f]{64}$/i, "precisa ter exatamente 64 caracteres hexadecimais (32 bytes)"),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV !== "test") return;
