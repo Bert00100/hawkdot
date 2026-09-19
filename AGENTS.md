@@ -197,3 +197,16 @@ Verificado com `EXPLAIN (COSTS OFF)` contra o banco real, como `hawkdot_api_logi
 A reserva usa `SELECT ... FOR UPDATE SKIP LOCKED` numa subquery (padrão de fila em Postgres): cada chamada concorrente pega um lote diferente de monitores sem esperar o lock de outra. `next_check_at` avança **no mesmo UPDATE que reserva** — antes do check rodar, não depois — para que uma execução lenta num worker não faça outro repetir o mesmo monitor no tick seguinte.
 
 Todo monitor criado (`createMonitor`, #30) já nasce com `next_check_at = now()`, para ficar imediatamente elegível — sem isso ficaria `NULL` e o índice parcial `monitors_due_idx` (que filtra por `next_check_at <= now()`) nunca o encontraria.
+
+# Retenção de `monitor_executions` (decisão pendente de implementação, #36)
+
+`monitor_executions` é a tabela de maior crescimento do sistema — um monitor de 1 minuto gera ~43k linhas/mês. O índice BRIN (`monitor_executions_started_brin_idx`) já foi desenhado para esse padrão de crescimento cronológico (muito mais leve que B-tree para uma coluna que só cresce).
+
+**Decisão para o MVP**: nenhum expurgo automático ainda — manter todo o histórico. Volume ainda pequeno não justifica a complexidade agora.
+
+**Opções avaliadas para quando o volume justificar** (nenhuma implementada, registrado para não ser redescoberto do zero):
+- **TTL simples**: job periódico (`DELETE FROM monitor_executions WHERE started_at < now() - interval 'N days'`), rodando no próprio processo do worker ou num cron separado. Mais simples de implementar, mas `DELETE` em massa numa tabela grande gera bloat até o próximo `VACUUM`.
+- **Particionamento nativo do Postgres** (`PARTITION BY RANGE (started_at)`, partições mensais): `DROP` de partição inteira é instantâneo e sem bloat, mas exige migrar a tabela existente para particionada — mudança estrutural, não só uma query de limpeza.
+- **Agregação em resumos**: manter execuções recentes detalhadas e comprimir execuções antigas num resumo diário/horário (ex.: `% de sucesso`, `p95 de response_time`). Reduz volume mas perde o detalhe por execução individual do histórico antigo.
+
+Reavaliar quando o tamanho da tabela ou o tempo de `VACUUM`/backup começar a doer — não antes.

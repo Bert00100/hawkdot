@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { workerBasePrisma } from "@/worker/database";
 import { reserveDueMonitors } from "@/worker/scheduler.model";
+import { executeMonitor } from "@/worker/execute-monitor";
 
 // Loop de polling simples (ver AGENTS.md, "Worker: processo, conexao e
 // contexto"). Este arquivo cuida do ciclo de vida do processo: conectar,
@@ -14,8 +15,20 @@ async function tick(): Promise<void> {
     if (reservados.length === 0) return;
 
     console.log(`[worker] ${reservados.length} monitor(es) reservado(s)`);
-    // Execucao de fato (por organizacao, via withWorkerTenant) entra na
-    // #35 -- por enquanto so reserva e loga.
+
+    // Cada monitor abre sua propria transacao (withWorkerTenant, dentro de
+    // executeMonitor) -- rodar em paralelo nao arrisca misturar contexto de
+    // organizacao entre eles.
+    const resultados = await Promise.allSettled(reservados.map(executeMonitor));
+
+    resultados.forEach((resultado, index) => {
+        if (resultado.status === "rejected") {
+            console.error(
+                `[worker] falha ao executar monitor ${reservados[index].id}:`,
+                resultado.reason,
+            );
+        }
+    });
 }
 
 async function main(): Promise<void> {
