@@ -8,7 +8,8 @@ import {
     createOwnerMembership,
     findActiveOrganizationMemberships,
 } from "@/models/organization-member.model";
-import { unauthenticated, internalError } from "@/lib/errors";
+import { unauthenticated, internalError, forbidden } from "@/lib/errors";
+import type { Session } from "@/lib/auth/require-session";
 import type { LoginInput, SignupInput } from "@/lib/dto/auth.dto";
 
 export type SignupResult = {
@@ -119,5 +120,43 @@ export async function login(input: LoginInput): Promise<LoginResult> {
         token,
         user: { id: user.id, email: user.email, display_name: user.display_name },
         organization_id: organizationId,
+    };
+}
+
+export type SwitchOrganizationResult = {
+    token: string;
+    organization: { id: string; name: string; slug: string; role: string };
+};
+
+// Rota sensivel: e o mecanismo de trocar de tenant. Verificar que o usuario
+// tem membership ACTIVE na organizacao alvo antes de reemitir o token nao e
+// opcional -- sem essa checagem, pedir a troca seria o bastante para forjar
+// acesso a outro tenant (o RLS ainda filtraria os dados depois, mas um
+// token com organizacao errada ja e comportamento confuso e uma superficie
+// de ataque desnecessaria).
+export async function switchOrganization(
+    session: Session,
+    targetOrganizationId: string,
+): Promise<SwitchOrganizationResult> {
+    const memberships = await findActiveOrganizationMemberships(session.userId);
+    const membership = memberships.find((m) => m.organization_id === targetOrganizationId);
+
+    if (!membership) {
+        throw forbidden("Voce nao e membro dessa organizacao.");
+    }
+
+    const token = await signSessionToken({
+        user_id: session.userId,
+        organization_id: targetOrganizationId,
+    });
+
+    return {
+        token,
+        organization: {
+            id: membership.organization_id,
+            name: membership.organization_name,
+            slug: membership.organization_slug,
+            role: membership.role,
+        },
     };
 }

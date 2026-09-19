@@ -27,3 +27,9 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const switchOrganizationSchema = z.object({
+    organization_id: dto.uuid,
+});
+
+export type SwitchOrganizationInput = z.infer<typeof switchOrganizationSchema>;
