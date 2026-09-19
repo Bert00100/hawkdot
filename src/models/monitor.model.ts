@@ -107,3 +107,18 @@ export function listMonitors(
 export function countMonitors(tx: TenantClient, filters: ListMonitorsFilters) {
     return tx.monitors.count({ where: whereFromFilters(filters) });
 }
+
+// Usado pelo motor de entrega (#41) para decidir o cooldown efetivo de uma
+// notificacao especifica de monitor -- so essa coluna, nunca o monitor
+// inteiro.
+export async function findMonitorNotificationCooldown(
+    tx: TenantClient,
+    monitorId: string,
+): Promise<number | null> {
+    const monitor = await tx.monitors.findUnique({
+        where: { id: monitorId },
+        select: { notification_cooldown_seconds: true },
+    });
+
+    return monitor?.notification_cooldown_seconds ?? null;
+}

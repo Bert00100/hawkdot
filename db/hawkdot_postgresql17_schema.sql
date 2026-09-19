@@ -1456,9 +1456,17 @@ TO hawkdot_app;
 
 GRANT SELECT ON
     hawkdot.monitor_executions,
-    hawkdot.events,
-    hawkdot.notification_deliveries
+    hawkdot.events
 TO hawkdot_app;
+
+-- #41: o motor de entrega roda com o role da API (hawkdot_app), dentro do
+-- withTenant() do usuario/organizacao dona do evento -- o worker
+-- (hawkdot_worker) nao tem GRANT em notification_rules/notification_channels
+-- de proposito (#38: so emite eventos), entao quem casa evento -> regra ->
+-- canal e cria a entrega tem que ser o role da API. UPDATE fica de fora --
+-- a mudanca de status (pending -> sent/failed) e responsabilidade do
+-- adapter de entrega (#42), nao desta grant.
+GRANT SELECT, INSERT ON hawkdot.notification_deliveries TO hawkdot_app;
 
 GRANT SELECT, UPDATE ON hawkdot.incidents TO hawkdot_app;
 GRANT SELECT, INSERT ON hawkdot.audit_logs TO hawkdot_app;
