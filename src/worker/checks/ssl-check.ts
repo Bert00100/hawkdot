@@ -1,4 +1,5 @@
 import * as tls from "node:tls";
+import * as net from "node:net";
 import type { CheckExecutor, CheckResult } from "@/worker/checks/types";
 
 export type SslCheckConfig = {
@@ -44,6 +45,7 @@ export const runSslCheck: CheckExecutor<SslCheckConfig> = (config, timeoutSecond
         const finish = (result: CheckResult) => {
             if (settled) return;
             settled = true;
+            clearTimeout(watchdog);
             socket.destroy();
             resolve(result);
         };
@@ -51,14 +53,34 @@ export const runSslCheck: CheckExecutor<SslCheckConfig> = (config, timeoutSecond
         // A cadeia fica a cargo do handshake do Node. O hostname e verificado
         // manualmente apos o handshake para que verify_hostname continue
         // funcionando mesmo quando verify_chain estiver desabilitado.
+        //
+        // SNI (servername) nao se aplica a enderecos IP por RFC 6066 --
+        // passar um IP ai gera um warning de depreciacao do Node. So manda
+        // servername quando o alvo e um hostname de verdade.
+        const sniTarget = config.sni_name || config.hostname;
         const socket = tls.connect({
             host: config.hostname,
             port: config.port,
-            servername: config.sni_name || config.hostname,
+            servername: net.isIP(sniTarget) ? undefined : sniTarget,
             rejectUnauthorized: config.verify_chain,
             timeout: timeoutSeconds * 1000,
             checkServerIdentity: () => undefined,
         });
+
+        // Guarda explicita alem do `timeout` do socket (que so dispara apos
+        // o periodo IDLE, nao um prazo absoluto desde o inicio da conexao
+        // -- em alguns ambientes isso demorou mais que o esperado). Garante
+        // que a promise sempre resolve dentro de timeoutSeconds.
+        const watchdog = setTimeout(() => {
+            finish({
+                check_status: "timeout",
+                observed_state: "down",
+                response_time_ms: Date.now() - startedAt,
+                summary: `Tempo esgotado apos ${timeoutSeconds}s`,
+                details: {},
+            });
+        }, timeoutSeconds * 1000);
+        watchdog.unref();
 
         socket.once("timeout", () => {
             finish({
@@ -114,20 +136,31 @@ export const runSslCheck: CheckExecutor<SslCheckConfig> = (config, timeoutSecond
             }
 
             const expiresAt = new Date(cert.valid_to);
-            const daysRemaining = Math.floor((expiresAt.getTime() - Date.now()) / MS_PER_DAY);
+            // Math.floor arredonda pra baixo -- um certificado que vence em
+            // 23h59 ainda tem "0 dias completos restantes", mas NAO esta
+            // expirado. A expiracao em si e sempre comparada por timestamp,
+            // nunca pelo daysRemaining arredondado (que so serve para o
+            // limiar de warning_days).
+            const isExpired = expiresAt.getTime() <= Date.now();
+            const daysRemaining = Math.max(
+                0,
+                Math.floor((expiresAt.getTime() - Date.now()) / MS_PER_DAY),
+            );
             const maiorAvisoAcionado = config.warning_days.some((dias) => daysRemaining <= dias);
 
-            const observedState: CheckResult["observed_state"] =
-                daysRemaining <= 0 ? "down" : maiorAvisoAcionado ? "degraded" : "up";
+            const observedState: CheckResult["observed_state"] = isExpired
+                ? "down"
+                : maiorAvisoAcionado
+                  ? "degraded"
+                  : "up";
 
             finish({
                 check_status: "success",
                 observed_state: observedState,
                 response_time_ms: responseTimeMs,
-                summary:
-                    daysRemaining <= 0
-                        ? "Certificado expirado."
-                        : `Certificado expira em ${daysRemaining} dia(s).`,
+                summary: isExpired
+                    ? "Certificado expirado."
+                    : `Certificado expira em ${daysRemaining} dia(s).`,
                 details: {
                     days_remaining: daysRemaining,
                     valid_to: cert.valid_to,
