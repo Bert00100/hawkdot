@@ -1,4 +1,4 @@
-import { POST } from "@/app/api/monitors/route";
+import { GET as monitorsGET, POST } from "@/app/api/monitors/route";
 import { GET, PATCH, DELETE } from "@/app/api/monitors/[id]/route";
 import { signSessionToken } from "@/lib/auth/jwt";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/session-cookie";
@@ -85,5 +85,36 @@ describe("rotas de monitores", () => {
         expect(body.error.details?.some((d: { field: string }) => d.field === "interval_seconds")).toBe(
             true,
         );
+    });
+});
+
+describe("GET /api/monitors", () => {
+    it("lista paginado e filtrado por monitor_type via query string", async () => {
+        const { user, organization, resource } = await createFullTenant();
+        const token = await signSessionToken({ user_id: user.id, organization_id: organization.id });
+        const cookie = { cookie: `${SESSION_COOKIE_NAME}=${token}` };
+
+        await POST(
+            new Request("http://localhost/api/monitors", {
+                method: "POST",
+                headers: cookie,
+                body: JSON.stringify({
+                    resource_id: resource.id,
+                    monitor_type: "ping",
+                    name: "Ping via rota",
+                    config: { host: "exemplo.com" },
+                }),
+            }),
+        );
+
+        const response = await monitorsGET(
+            new Request("http://localhost/api/monitors?monitor_type=ping&page=1&per_page=10", {
+                headers: cookie,
+            }),
+        );
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.items.every((m: { monitor_type: string }) => m.monitor_type === "ping")).toBe(true);
     });
 });

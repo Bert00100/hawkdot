@@ -4,10 +4,13 @@ import type { Session } from "@/lib/auth/require-session";
 import { requireRole, type MemberRole } from "@/lib/auth/require-role";
 import { notFound } from "@/lib/errors";
 import {
+    countResources,
     createResourceParent,
     deleteResourceParent,
     findResourceById,
+    listResources,
     updateResourceParent,
+    type ResourceType,
 } from "@/models/resource.model";
 import {
     createDomainResource,
@@ -331,5 +334,50 @@ function shapeIp(
         environment: resource.environment,
         status: resource.status,
         address: ip.address,
+    };
+}
+
+export type ResourceListItem = {
+    id: string;
+    resource_type: string;
+    display_name: string;
+    environment: string;
+    status: string;
+};
+
+export type ResourceListResult = {
+    items: ResourceListItem[];
+    page: number;
+    per_page: number;
+    total: number;
+};
+
+export async function listResourcesController(
+    tx: TenantClient,
+    query: { page: number; per_page: number; resource_type?: ResourceType; status?: "active" | "paused" | "archived"; environment?: "production" | "staging" | "development" | "other" },
+): Promise<ResourceListResult> {
+    const offset = (query.page - 1) * query.per_page;
+    const filters = {
+        resourceType: query.resource_type,
+        status: query.status,
+        environment: query.environment,
+    };
+
+    const [resources, total] = await Promise.all([
+        listResources(tx, filters, { limit: query.per_page, offset }),
+        countResources(tx, filters),
+    ]);
+
+    return {
+        items: resources.map((r) => ({
+            id: r.id,
+            resource_type: r.resource_type,
+            display_name: r.display_name,
+            environment: r.environment,
+            status: r.status,
+        })),
+        page: query.page,
+        per_page: query.per_page,
+        total,
     };
 }

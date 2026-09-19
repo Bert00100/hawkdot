@@ -173,3 +173,9 @@ Isso garante, no próprio banco, que uma linha de `domain_resources` só pode ap
 4. Update/delete seguem o mesmo padrão de duas chamadas na mesma transação; `ON DELETE CASCADE` cuida da filha quando o pai é removido.
 
 **Diferente do bootstrap do signup (#14) e do aceite de convite (#24), aqui não há problema de `RETURNING`**: quem cria/lê/atualiza um recurso já é membro ativo da organização (passou por `requireRole` ou pelo menos por `withSession`), então `tenant_app_select` já enxerga a linha sem a circularidade daqueles dois casos — os models usam `.create()`/`.update()` normais do Prisma, sem precisar do workaround de `$executeRaw` sem `RETURNING`.
+
+# Paginação e índices de listagem (#32)
+
+`GET /api/resources` e `GET /api/monitors` usam offset/limit (`dto.paginacao`, `page`/`per_page`) — estratégia mais simples que cursor e suficiente para o volume do MVP; cursor fica para quando a paginação por offset começar a doer de verdade (fica registrado aqui para não ser esquecido).
+
+Verificado com `EXPLAIN (COSTS OFF)` contra o banco real, como `hawkdot_api_login` com contexto de tenant setado: as duas queries de listagem usam `Bitmap Index Scan` nos índices já existentes (`resources_org_type_status_idx`, `monitors_org_state_idx`) pela coluna `organization_id` — que a RLS sempre injeta automaticamente no filtro. Os demais filtros (`resource_type`/`status`/`environment`, `current_state`) aparecem como `Filter` pós-scan nesse volume de dados pequeno do ambiente de teste; o índice composto continua disponível para o planner usar mais das colunas líderes à medida que o volume cresce.

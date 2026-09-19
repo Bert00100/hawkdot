@@ -5,9 +5,11 @@ import { requireRole } from "@/lib/auth/require-role";
 import { notFound, validationError } from "@/lib/errors";
 import { parseInput } from "@/lib/dto";
 import {
+    countMonitors,
     createMonitor,
     deleteMonitor,
     findMonitorById,
+    listMonitors,
     updateMonitor,
 } from "@/models/monitor.model";
 import {
@@ -191,4 +193,57 @@ export async function deleteMonitorController(
     }
 
     await deleteMonitor(tx, id);
+}
+
+export type MonitorListItem = {
+    id: string;
+    resource_id: string;
+    monitor_type: string;
+    name: string;
+    status: string;
+    current_state: string;
+};
+
+export type MonitorListResult = {
+    items: MonitorListItem[];
+    page: number;
+    per_page: number;
+    total: number;
+};
+
+export async function listMonitorsController(
+    tx: TenantClient,
+    query: {
+        page: number;
+        per_page: number;
+        monitor_type?: "ssl" | "http" | "ping";
+        status?: "active" | "paused" | "archived";
+        current_state?: "unknown" | "up" | "down" | "degraded";
+    },
+): Promise<MonitorListResult> {
+    const offset = (query.page - 1) * query.per_page;
+    const filters = {
+        monitorType: query.monitor_type,
+        status: query.status,
+        currentState: query.current_state,
+    };
+
+    const [monitors, total] = await Promise.all([
+        listMonitors(tx, filters, { limit: query.per_page, offset }),
+        countMonitors(tx, filters),
+    ]);
+
+    return {
+        items: monitors.map((m) => ({
+            id: m.id,
+            resource_id: m.resource_id,
+            monitor_type: m.monitor_type,
+            name: m.name,
+            status: m.status,
+            current_state: m.current_state,
+        })),
+        page: query.page,
+        per_page: query.per_page,
+        total,
+    };
 }
