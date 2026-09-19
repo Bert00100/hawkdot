@@ -33,3 +33,21 @@ export async function createOrganizationRecord(
 export function findOrganizationById(tx: TenantClient, id: string) {
     return tx.organizations.findUnique({ where: { id } });
 }
+
+export type UpdateOrganizationData = Partial<{
+    name: string;
+    slug: string;
+    kind: "personal" | "company";
+}>;
+
+// Update normal (com RETURNING): diferente do insert do signup, aqui o
+// usuario ja e membro ativo da organizacao havia antes da chamada --
+// organizations_member_select ja enxerga a linha sem o problema circular
+// do bootstrap.
+export function updateOrganizationRecord(
+    tx: TenantClient,
+    id: string,
+    data: UpdateOrganizationData,
+) {
+    return tx.organizations.update({ where: { id }, data });
+}
