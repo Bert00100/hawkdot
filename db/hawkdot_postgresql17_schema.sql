@@ -1066,6 +1066,52 @@ $function$;
 
 GRANT EXECUTE ON FUNCTION hawkdot_private.find_user_id_by_email(citext) TO hawkdot_app;
 
+-- Reserva de monitores vencidos para o scheduler do worker (issue #34).
+-- Categoria DIFERENTE das funcoes SECURITY DEFINER anteriores desta secao:
+-- aquelas existem porque o chamador ainda nao sabe seu proprio
+-- user_id/organization_id. Esta existe porque o AGENDADOR precisa enxergar
+-- monitores de TODAS as organizacoes ao mesmo tempo -- e o worker so
+-- consegue contexto de UMA organizacao por vez (tenant_worker_isolation
+-- exige organization_id = current_organization_id()). Sem esta funcao nao
+-- haveria como descobrir quais organizacoes tem trabalho pendente.
+--
+-- SELECT ... FOR UPDATE SKIP LOCKED na subquery: cada chamada concorrente
+-- pega um lote diferente de monitores sem esperar o lock de outra (padrao
+-- de fila em Postgres). next_check_at avanca NO MESMO UPDATE que reserva --
+-- antes do check rodar, nao depois -- para que uma execucao lenta no worker
+-- A nao faca o worker B repetir o mesmo monitor no proximo tick.
+CREATE FUNCTION hawkdot_private.reserve_due_monitors(p_limit integer DEFAULT 50)
+RETURNS TABLE (
+    id uuid,
+    organization_id uuid,
+    resource_id uuid,
+    monitor_type hawkdot.monitor_type,
+    interval_seconds integer,
+    timeout_seconds integer
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, hawkdot
+SET row_security = off
+AS $function$
+    UPDATE hawkdot.monitors AS m
+    SET next_check_at = now() + make_interval(secs => m.interval_seconds)
+    FROM (
+        SELECT due.id
+        FROM hawkdot.monitors AS due
+        WHERE due.status = 'active'::hawkdot.monitor_status
+          AND due.execution_mode = 'interval'::hawkdot.execution_mode
+          AND due.next_check_at <= now()
+        ORDER BY due.next_check_at
+        FOR UPDATE OF due SKIP LOCKED
+        LIMIT p_limit
+    ) AS reserved
+    WHERE m.id = reserved.id
+    RETURNING m.id, m.organization_id, m.resource_id, m.monitor_type, m.interval_seconds, m.timeout_seconds
+$function$;
+
+GRANT EXECUTE ON FUNCTION hawkdot_private.reserve_due_monitors(integer) TO hawkdot_worker;
+
 -- Aceite do proprio convite (issue #24): members_update exige owner/admin
 -- do ATOR, mas quem aceita ainda nao tem papel nenhum -- o terceiro
 -- conflito desse tipo na milestone (depois do login e do /me).

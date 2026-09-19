@@ -32,6 +32,10 @@ export function createMonitor(tx: TenantClient, data: CreateMonitorData) {
             failure_threshold: data.failureThreshold,
             recovery_threshold: data.recoveryThreshold,
             notification_cooldown_seconds: data.notificationCooldownSeconds,
+            // monitors_due_idx (issue #34) filtra por next_check_at <= now()
+            // -- sem isso, um monitor recem-criado ficaria com next_check_at
+            // NULL e nunca seria pego pelo scheduler.
+            next_check_at: new Date(),
         },
     });
 }

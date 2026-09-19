@@ -1,15 +1,21 @@
 import "dotenv/config";
 import { workerBasePrisma } from "@/worker/database";
+import { reserveDueMonitors } from "@/worker/scheduler.model";
 
 // Loop de polling simples (ver AGENTS.md, "Worker: processo, conexao e
-// contexto"). A logica de scheduling em si entra na issue #34 -- este
-// arquivo so cuida do ciclo de vida do processo: conectar, rodar tick() em
-// intervalo, encerrar de forma limpa em SIGINT/SIGTERM.
+// contexto"). Este arquivo cuida do ciclo de vida do processo: conectar,
+// rodar tick() em intervalo, encerrar de forma limpa em SIGINT/SIGTERM.
 const POLL_INTERVAL_MS = 15_000;
+const BATCH_SIZE = 50;
 
 async function tick(): Promise<void> {
-    // Placeholder ate a #34 implementar o scheduler de verdade.
-    console.log("[worker] tick");
+    const reservados = await reserveDueMonitors(BATCH_SIZE);
+
+    if (reservados.length === 0) return;
+
+    console.log(`[worker] ${reservados.length} monitor(es) reservado(s)`);
+    // Execucao de fato (por organizacao, via withWorkerTenant) entra na
+    // #35 -- por enquanto so reserva e loga.
 }
 
 async function main(): Promise<void> {

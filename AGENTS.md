@@ -189,3 +189,11 @@ Verificado com `EXPLAIN (COSTS OFF)` contra o banco real, como `hawkdot_api_logi
 **Contexto de tenant do worker** (`src/worker/with-worker-tenant.ts`): define **só** `hawkdot.current_organization_id` — nunca `current_user_id`, porque o worker não age em nome de um usuário. `tenant_worker_isolation` reflete isso: exige só `organization_id = current_organization_id()`, sem checagem de papel (não existe "papel" para um processo de fundo).
 
 **Grants deliberadamente mais restritos que a API** — verificado contra o banco real, não só lido do `.sql`: `hawkdot_worker` tem `SELECT, INSERT, UPDATE` em `monitor_executions`/`incidents`/`notification_deliveries`, `SELECT, UPDATE` em `monitors`/`server_agents` (sem `DELETE`), `SELECT, INSERT` em `events`, `INSERT` em `audit_logs`. Um `DELETE` em `monitors` pelo worker falha na hora do `GRANT`, antes mesmo de qualquer policy de RLS entrar em jogo.
+
+# Terceira categoria de exceção ao "nenhuma query roda fora do withTenant" (#34)
+
+`hawkdot_private.reserve_due_monitors()` é uma exceção de um tipo novo às duas já documentadas (#11: health check, lookup de login/convite/membro). As duas anteriores existem porque o **chamador** ainda não sabe seu próprio `user_id`/`organization_id`. Esta existe porque o **agendador do worker precisa enxergar monitores de todas as organizações ao mesmo tempo** — e o worker só consegue ter contexto de uma organização por vez (`tenant_worker_isolation` exige `organization_id = current_organization_id()`). Sem essa função, não haveria como descobrir quais organizações têm trabalho pendente.
+
+A reserva usa `SELECT ... FOR UPDATE SKIP LOCKED` numa subquery (padrão de fila em Postgres): cada chamada concorrente pega um lote diferente de monitores sem esperar o lock de outra. `next_check_at` avança **no mesmo UPDATE que reserva** — antes do check rodar, não depois — para que uma execução lenta num worker não faça outro repetir o mesmo monitor no tick seguinte.
+
+Todo monitor criado (`createMonitor`, #30) já nasce com `next_check_at = now()`, para ficar imediatamente elegível — sem isso ficaria `NULL` e o índice parcial `monitors_due_idx` (que filtra por `next_check_at <= now()`) nunca o encontraria.

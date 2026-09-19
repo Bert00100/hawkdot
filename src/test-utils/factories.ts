@@ -93,6 +93,9 @@ export async function createMonitor(
             monitor_type: overrides.monitor_type ?? "http",
             name: overrides.name ?? `Monitor Teste ${n}`,
             interval_seconds: overrides.interval_seconds ?? 60,
+            // Mesmo default do createMonitor real (#34): sem isso o monitor
+            // de teste nunca fica "devido" para o scheduler do worker.
+            next_check_at: new Date(),
         },
     });
 }
