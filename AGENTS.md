@@ -111,3 +111,21 @@ A validação roda na **borda** (rota), antes do controller. Os CHECK constraint
 4. Na rota, use `parseBody(schema, request)` para corpo JSON ou `parseQuery(schema, request)` para query string. Ambos lançam `VALIDATION_ERROR` (400) com a lista de campos — inclusive quando o JSON chega malformado.
 
 Regra que vale a pena manter: sempre que uma primitiva nova espelhar um CHECK, escreva um teste que confronte o Zod com o banco de verdade (veja o bloco "alinhamento com os CHECK constraints do banco" em `src/lib/dto/common.test.ts`). Se o Zod aceitar algo que o Postgres recusa, o usuário toma um 500 em vez de um 400.
+
+# Contrato de acesso a dados (multi-tenant / RLS)
+
+O banco é a fonte de verdade do isolamento entre organizações e da autorização por papel — não o código da aplicação. Regras que não podem ser quebradas por nenhuma feature futura:
+
+**Nenhuma query de negócio roda fora do `withTenant`.** `src/lib/tenant/with-tenant.ts` abre uma transação, define `hawkdot.current_user_id`/`hawkdot.current_organization_id` via `set_config` e só então entrega o client `tx` ao callback. Todo model de recurso recebe esse `tx` como parâmetro — nunca importa `prisma` (o default export de `src/config/database.ts`) para chamar um método de modelo. Esse default export é um client **guardado** (`src/lib/tenant/guard.ts`, issue #10): qualquer `findMany`/`create`/... nele direto lança `MissingTenantContextError` em desenvolvimento e teste, e só loga em produção.
+
+**Por que `set_config` usa o terceiro parâmetro `true`.** Ele limita o valor à transação atual. Isso não é um detalhe — é o que torna seguro reusar conexões de um pool. Se fosse `false`, o valor setado numa request vazaria para a *próxima* request que pegasse a mesma conexão física do pool: um tenant leria dados de outro. Por isso `set_config` só pode rodar dentro de uma transação Prisma (`$transaction` interativo), nunca numa conexão solta.
+
+**Exceções legítimas** — as únicas operações que rodam fora do `withTenant`, e por quê é seguro:
+- `health.model.ts` — só faz `SELECT NOW()`, não toca tabela de negócio.
+- Lookup de login por e-mail (M3, issue #12) — nesse momento ainda não existe `current_user_id` para definir; usa uma função `SECURITY DEFINER` em `hawkdot_private` que devolve só o necessário para autenticar.
+
+Ambas usam `$queryRaw`/`$executeRaw` no client guardado — a extensão do #10 só intercepta operações de modelo (`$allModels`), não raw queries, então essas duas exceções não precisam de nenhuma lista de exclusão explícita no guard.
+
+**A aplicação complementa o RLS, não o substitui.** Um helper como `requireRole` (M4) melhora a mensagem de erro (403 com texto claro em vez de um 404/lista vazia confuso) e evita uma query desnecessária, mas **nunca** é a única barreira — a policy de RLS correspondente sempre existe no banco. Se um helper de autorização tiver um bug, o RLS ainda impede o vazamento de dados.
+
+**`adm` (o superusuário) nunca é usado pela aplicação.** Ele tem `BYPASSRLS` — existe só para administração do banco e para os testes populares dados via `src/test-utils/admin-client.ts` (que roda como `adm` de propósito, para poder inserir dados de teste ignorando as policies). Qualquer código de produção que precisar de um client Postgres usa o role `hawkdot_app` (API) ou `hawkdot_worker` (worker), nunca `adm`.
