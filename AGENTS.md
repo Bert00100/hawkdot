@@ -210,3 +210,19 @@ Todo monitor criado (`createMonitor`, #30) já nasce com `next_check_at = now()`
 - **Agregação em resumos**: manter execuções recentes detalhadas e comprimir execuções antigas num resumo diário/horário (ex.: `% de sucesso`, `p95 de response_time`). Reduz volume mas perde o detalhe por execução individual do histórico antigo.
 
 Reavaliar quando o tamanho da tabela ou o tempo de `VACUUM`/backup começar a doer — não antes.
+
+# Vocabulário de events e deduplicação de avisos de SSL (#38)
+
+`events` desacopla o worker do motor de notificações (M7): o worker só emite, quem consome e filtra por `event_code` é a M7. Adicionar um canal de notificação novo não exige mexer no worker.
+
+| `event_code` | `severity` | Quando |
+|---|---|---|
+| `monitor.down` | `critical` | Monitor cruza `failure_threshold` (mesmo instante de `incident.opened`) |
+| `monitor.up` | `info` | Monitor cruza `recovery_threshold` (mesmo instante de `incident.resolved`) |
+| `incident.opened` | `critical` | Um novo incidente é aberto |
+| `incident.resolved` | `info` | O incidente ativo é resolvido |
+| `ssl.expiring` | `warning` (ou `critical` se já expirado) | Certificado cruza uma faixa de `warning_days` |
+
+`monitor.down`/`incident.opened` e `monitor.up`/`incident.resolved` são sempre emitidos aos pares, pela mesma transição em `src/worker/incident-state-machine.ts` — dá para uma regra de notificação (M7) filtrar por qualquer um dos dois sem diferença prática hoje, mas mantém o vocabulário granular caso um dia divirjam (ex.: reabertura de incidente sem mudar `current_state`).
+
+**Deduplicação do `ssl.expiring`**: um certificado a 30 dias do vencimento, checado a cada 5 minutos, geraria centenas de eventos por dia sem isso. Estratégia (`src/worker/ssl-expiry-events.ts`): `warning_days` (ex.: `[30, 14, 7, 3, 1]`) define faixas; a faixa atual é o menor valor da lista que ainda é `>= daysRemaining` (o limiar mais urgente já cruzado). Só emite de novo quando essa faixa fica **mais urgente** que a do último `ssl.expiring` registrado para aquele monitor — nunca por permanecer na mesma faixa. Não precisou de coluna nova: o histórico de `events` já serve como "último aviso emitido" (consulta pelo evento mais recente daquele `monitor_id`+`event_code`, ordenado por `happened_at`).

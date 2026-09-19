@@ -1,4 +1,7 @@
 import * as http from "node:http";
+import * as tls from "node:tls";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { executeMonitor } from "@/worker/execute-monitor";
 import { workerBasePrisma } from "@/worker/database";
 import { adminClient } from "@/test-utils/admin-client";
@@ -152,5 +155,64 @@ describe("executeMonitor", () => {
                 timeout_seconds: 5,
             }),
         ).resolves.toBeUndefined();
+    });
+});
+
+describe("executeMonitor -- integracao com aviso de expiracao de SSL (#38)", () => {
+    it("monitor SSL que cruza warning_days emite ssl.expiring", async () => {
+        const key = readFileSync(join(process.cwd(), "src/worker/checks/fixtures/localhost-key.pem"));
+        const cert = readFileSync(join(process.cwd(), "src/worker/checks/fixtures/localhost-cert.pem"));
+        const sockets = new Set<import("node:net").Socket>();
+        const server = tls.createServer({ key, cert });
+        server.on("connection", (socket) => {
+            sockets.add(socket);
+            socket.once("close", () => sockets.delete(socket));
+        });
+        await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+        const { port } = server.address() as { port: number };
+
+        const { organization, resource } = await createFullTenant();
+        const monitor = await adminClient.monitors.create({
+            data: {
+                organization_id: organization.id,
+                resource_id: resource.id,
+                monitor_type: "ssl",
+                name: "SSL com aviso",
+                interval_seconds: 60,
+                timeout_seconds: 5,
+                next_check_at: new Date(),
+            },
+        });
+        await adminClient.ssl_monitor_configs.create({
+            data: {
+                monitor_id: monitor.id,
+                organization_id: organization.id,
+                hostname: "127.0.0.1",
+                port,
+                verify_chain: false,
+                // certificado da fixture vale ate 2126 -- um warning_days
+                // gigante forca a faixa de aviso sem precisar de um cert
+                // proximo do vencimento de verdade.
+                warning_days: [40000],
+            },
+        });
+
+        await executeMonitor({
+            id: monitor.id,
+            organization_id: organization.id,
+            resource_id: resource.id,
+            monitor_type: "ssl",
+            interval_seconds: 60,
+            timeout_seconds: 5,
+        });
+
+        const eventos = await adminClient.events.findMany({
+            where: { monitor_id: monitor.id, event_code: "ssl.expiring" },
+        });
+        expect(eventos).toHaveLength(1);
+        expect(eventos[0].severity).toBe("warning");
+
+        sockets.forEach((socket) => socket.destroy());
+        await new Promise<void>((resolve) => server.close(() => resolve()));
     });
 });

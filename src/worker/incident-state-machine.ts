@@ -1,15 +1,19 @@
 import type { WorkerTenantClient } from "@/worker/with-worker-tenant";
 import { findActiveIncident, openIncident, resolveIncident } from "@/worker/incident.model";
+import { createEvent, EVENT_CODES } from "@/worker/event.model";
 import type { CheckResult } from "@/worker/checks/types";
 
 // O coracao do produto (#37): transforma o resultado de UM check em estado
-// do monitor e, quando cruza o limiar configurado, em incidente.
+// do monitor e, quando cruza o limiar configurado, em incidente + eventos
+// (#38 -- monitor.down/up e incident.opened/resolved, emitidos no mesmo
+// instante da transicao).
 //
 // A logica opera sobre check_status (success vs failure/timeout/error), nao
 // sobre observed_state -- um check SSL "degraded" (certificado perto de
 // vencer) ainda e um check_status='success', entao NAO conta como falha
-// para fins de threshold/incidente. O aviso de expiracao e um EVENTO
-// separado (#38), nao um incidente de disponibilidade.
+// para fins de threshold/incidente. O aviso de expiracao e um evento
+// separado (ssl.expiring, ver src/worker/ssl-expiry-events.ts), nao um
+// incidente de disponibilidade.
 //
 // Um unico check falho nao significa queda: pode ser um blip de rede. Por
 // isso os contadores consecutive_failures/consecutive_successes so mudam o
@@ -31,8 +35,27 @@ export async function applyCheckResult(
         if (recovered) {
             const incidente = await findActiveIncident(tx, monitorId);
             if (incidente) {
-                await resolveIncident(tx, incidente.id, executionId);
+                const resolvido = await resolveIncident(tx, incidente.id, executionId);
+
+                await createEvent(tx, {
+                    organizationId: monitor.organization_id,
+                    monitorId,
+                    incidentId: resolvido.id,
+                    executionId,
+                    eventCode: EVENT_CODES.INCIDENT_RESOLVED,
+                    severity: "info",
+                    message: `Incidente de "${monitor.name}" resolvido.`,
+                });
             }
+
+            await createEvent(tx, {
+                organizationId: monitor.organization_id,
+                monitorId,
+                executionId,
+                eventCode: EVENT_CODES.MONITOR_UP,
+                severity: "info",
+                message: `"${monitor.name}" voltou a responder.`,
+            });
         }
 
         await tx.monitors.update({
@@ -60,12 +83,32 @@ export async function applyCheckResult(
         // do requireRole (#20) complementando o RLS, nao substituindo.
         const jaAberto = await findActiveIncident(tx, monitorId);
         if (!jaAberto) {
-            await openIncident(tx, {
+            const incidente = await openIncident(tx, {
                 organizationId: monitor.organization_id,
                 monitorId,
                 title: `${monitor.name} esta fora do ar`,
                 cause: result.summary,
                 openedByExecutionId: executionId,
+            });
+
+            await createEvent(tx, {
+                organizationId: monitor.organization_id,
+                monitorId,
+                incidentId: incidente.id,
+                executionId,
+                eventCode: EVENT_CODES.INCIDENT_OPENED,
+                severity: "critical",
+                message: incidente.title,
+            });
+
+            await createEvent(tx, {
+                organizationId: monitor.organization_id,
+                monitorId,
+                executionId,
+                eventCode: EVENT_CODES.MONITOR_DOWN,
+                severity: "critical",
+                message: `"${monitor.name}" parou de responder.`,
+                payload: { summary: result.summary },
             });
         }
     }
