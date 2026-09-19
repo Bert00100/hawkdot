@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { testDatabaseUrls } from "@/config/env";
 
 const adapter = new PrismaPg(
-    { connectionString: testDatabaseUrls().admin },
+    { connectionString: testDatabaseUrls().admin, max: 3 },
     { schema: "hawkdot" }
 );
 

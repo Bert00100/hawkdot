@@ -3,6 +3,7 @@ import nextJest from 'next/jest.js'
 const createJestConfig = nextJest({ dir: './' })
 
 const config = {
+  maxWorkers: 4,
   testEnvironment: 'node',
   // O next/jest resolve o alias `@/` reescrevendo os imports no SWC, o que nao
   // alcanca o argumento de `jest.mock('@/...')` — ele e string comum, nao
