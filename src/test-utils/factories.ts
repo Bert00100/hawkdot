@@ -108,3 +108,55 @@ export async function createFullTenant() {
 
     return { user, organization, member, resource, monitor };
 }
+
+export async function createCredential(
+    organizationId: string,
+    overrides: { name?: string } = {},
+) {
+    const n = nextSeq();
+
+    return adminClient.credentials.create({
+        data: {
+            organization_id: organizationId,
+            name: overrides.name ?? `Credencial Teste ${n}`,
+            credential_type: "api_token",
+            secret_reference: `secret-ref-${n}`,
+        },
+    });
+}
+
+// O canal 'browser' precisa existir antes da inscricao (FK composta
+// channel_id+organization_id+channel_type).
+export async function createBrowserNotificationChannel(organizationId: string) {
+    const n = nextSeq();
+
+    return adminClient.notification_channels.create({
+        data: {
+            organization_id: organizationId,
+            channel_type: "browser",
+            name: `Canal Browser Teste ${n}`,
+        },
+    });
+}
+
+export async function createBrowserPushSubscription(
+    organizationId: string,
+    userId: string,
+    overrides: { channelId?: string } = {},
+) {
+    const n = nextSeq();
+    const channelId =
+        overrides.channelId ?? (await createBrowserNotificationChannel(organizationId)).id;
+
+    return adminClient.browser_push_subscriptions.create({
+        data: {
+            organization_id: organizationId,
+            channel_id: channelId,
+            channel_type: "browser",
+            user_id: userId,
+            endpoint: `https://push.exemplo.test/${n}`,
+            p256dh_key: `p256dh-${n}`,
+            auth_secret_encrypted: Buffer.from(`segredo-${n}`),
+        },
+    });
+}
