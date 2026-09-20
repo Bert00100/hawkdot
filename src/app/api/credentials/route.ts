@@ -2,6 +2,7 @@ import { parseBody } from "@/lib/dto";
 import { createCredentialSchema } from "@/lib/dto/credential.dto";
 import { handleRoute, okResponse } from "@/lib/errors";
 import { withSession } from "@/lib/auth/require-session";
+import { extractRequestMeta } from "@/lib/audit/record-audit";
 import { createCredentialController, listCredentialsController } from "@/controllers/credential.controller";
 
 export const GET = handleRoute(async (request: Request) =>
@@ -10,9 +11,10 @@ export const GET = handleRoute(async (request: Request) =>
 
 export const POST = handleRoute(async (request: Request) => {
     const input = await parseBody(createCredentialSchema, request);
+    const meta = extractRequestMeta(request);
 
     return okResponse(
-        await withSession(request, (tx, session) => createCredentialController(tx, session, input)),
+        await withSession(request, (tx, session) => createCredentialController(tx, session, input, meta)),
         201,
     );
 });

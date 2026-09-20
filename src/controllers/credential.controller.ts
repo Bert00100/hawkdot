@@ -4,6 +4,7 @@ import type { Session } from "@/lib/auth/require-session";
 import { requireRole } from "@/lib/auth/require-role";
 import { notFound } from "@/lib/errors";
 import { encryptSecret, ENCRYPTION_KEY_ID } from "@/lib/crypto/credential-encryption";
+import { recordAudit, type RequestMeta } from "@/lib/audit/record-audit";
 import {
     createCredential,
     deleteCredential,
@@ -48,6 +49,7 @@ export async function createCredentialController(
     tx: TenantClient,
     session: Session,
     input: CreateCredentialInput,
+    meta: RequestMeta = {},
 ): Promise<CredentialResult> {
     await requireRole(tx, session, [...CREDENTIAL_ROLES]);
 
@@ -59,6 +61,15 @@ export async function createCredentialController(
         username: input.username,
         encryptedSecret: encryptSecret(input.secret),
         encryptionKeyId: ENCRYPTION_KEY_ID,
+    });
+
+    // Nunca o segredo -- so os metadados, os mesmos campos que ja saem na
+    // resposta da API (issue #43: "jamais os valores").
+    await recordAudit(tx, session, meta, {
+        action: "credential.created",
+        entityType: "credential",
+        entityId: credential.id,
+        afterData: { name: credential.name, credential_type: credential.credential_type },
     });
 
     return shape(credential);
@@ -78,6 +89,7 @@ export async function deleteCredentialController(
     tx: TenantClient,
     session: Session,
     id: string,
+    meta: RequestMeta = {},
 ): Promise<void> {
     await requireRole(tx, session, [...CREDENTIAL_ROLES]);
 
@@ -87,4 +99,11 @@ export async function deleteCredentialController(
     }
 
     await deleteCredential(tx, id);
+
+    await recordAudit(tx, session, meta, {
+        action: "credential.deleted",
+        entityType: "credential",
+        entityId: id,
+        beforeData: { name: existing.name, credential_type: existing.credential_type },
+    });
 }

@@ -2,6 +2,7 @@ import type { TenantClient } from "@/lib/tenant/with-tenant";
 import type { Session } from "@/lib/auth/require-session";
 import { requireRole } from "@/lib/auth/require-role";
 import { forbidden, notFound } from "@/lib/errors";
+import { recordAudit, type RequestMeta } from "@/lib/audit/record-audit";
 import {
     countActiveOwners,
     deleteMember,
@@ -45,6 +46,7 @@ export async function changeMemberRole(
     session: Session,
     targetUserId: string,
     newRole: MemberRole,
+    meta: RequestMeta = {},
 ): Promise<ChangeMemberRoleResult> {
     const actorRole = await requireRole(tx, session, ["owner", "admin"]);
 
@@ -59,6 +61,14 @@ export async function changeMemberRole(
 
     const updated = await updateMemberRole(tx, session.organizationId, targetUserId, newRole);
 
+    await recordAudit(tx, session, meta, {
+        action: "member.role_changed",
+        entityType: "organization_member",
+        entityId: targetUserId,
+        beforeData: { role: membership.role },
+        afterData: { role: updated.role },
+    });
+
     return { user_id: updated.user_id, role: updated.role, status: updated.status };
 }
 
@@ -66,6 +76,7 @@ export async function removeMember(
     tx: TenantClient,
     session: Session,
     targetUserId: string,
+    meta: RequestMeta = {},
 ): Promise<void> {
     const actorRole = await requireRole(tx, session, ["owner", "admin"]);
 
@@ -77,4 +88,11 @@ export async function removeMember(
     await assertCanActOnOwner(tx, session.organizationId, actorRole, membership.role);
 
     await deleteMember(tx, session.organizationId, targetUserId);
+
+    await recordAudit(tx, session, meta, {
+        action: "member.removed",
+        entityType: "organization_member",
+        entityId: targetUserId,
+        beforeData: { role: membership.role, status: membership.status },
+    });
 }

@@ -1,6 +1,7 @@
 import type { WorkerTenantClient } from "@/worker/with-worker-tenant";
 import { findActiveIncident, openIncident, resolveIncident } from "@/worker/incident.model";
 import { createEvent, EVENT_CODES } from "@/worker/event.model";
+import { createWorkerAuditLog } from "@/worker/audit-log.model";
 import type { CheckResult } from "@/worker/checks/types";
 
 // O coracao do produto (#37): transforma o resultado de UM check em estado
@@ -45,6 +46,15 @@ export async function applyCheckResult(
                     eventCode: EVENT_CODES.INCIDENT_RESOLVED,
                     severity: "info",
                     message: `Incidente de "${monitor.name}" resolvido.`,
+                });
+
+                await createWorkerAuditLog(tx, {
+                    organizationId: monitor.organization_id,
+                    action: "incident.resolved",
+                    entityType: "incident",
+                    entityId: resolvido.id,
+                    beforeData: { status: incidente.status },
+                    afterData: { status: resolvido.status },
                 });
             }
 
@@ -99,6 +109,14 @@ export async function applyCheckResult(
                 eventCode: EVENT_CODES.INCIDENT_OPENED,
                 severity: "critical",
                 message: incidente.title,
+            });
+
+            await createWorkerAuditLog(tx, {
+                organizationId: monitor.organization_id,
+                action: "incident.opened",
+                entityType: "incident",
+                entityId: incidente.id,
+                afterData: { status: incidente.status, title: incidente.title },
             });
 
             await createEvent(tx, {

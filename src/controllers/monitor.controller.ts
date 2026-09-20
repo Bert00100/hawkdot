@@ -25,6 +25,7 @@ import {
 } from "@/models/monitor-config.model";
 import { monitorConfigUpdateSchemas } from "@/lib/dto/monitor.dto";
 import type { CreateMonitorInput, UpdateMonitorInput } from "@/lib/dto/monitor.dto";
+import { recordAudit, type RequestMeta } from "@/lib/audit/record-audit";
 
 const WRITE_ROLES = ["owner", "admin", "operator"] as const;
 
@@ -93,6 +94,7 @@ export async function createMonitorController(
     tx: TenantClient,
     session: Session,
     input: CreateMonitorInput,
+    meta: RequestMeta = {},
 ): Promise<MonitorResult> {
     await requireRole(tx, session, [...WRITE_ROLES]);
 
@@ -118,6 +120,13 @@ export async function createMonitorController(
     } else {
         config = await createPingConfig(tx, monitorId, session.organizationId, input.config);
     }
+
+    await recordAudit(tx, session, meta, {
+        action: "monitor.created",
+        entityType: "monitor",
+        entityId: monitor.id,
+        afterData: { name: monitor.name, monitor_type: monitor.monitor_type },
+    });
 
     return shape(monitor, config);
 }
@@ -184,6 +193,7 @@ export async function deleteMonitorController(
     tx: TenantClient,
     session: Session,
     id: string,
+    meta: RequestMeta = {},
 ): Promise<void> {
     await requireRole(tx, session, [...WRITE_ROLES]);
 
@@ -193,6 +203,13 @@ export async function deleteMonitorController(
     }
 
     await deleteMonitor(tx, id);
+
+    await recordAudit(tx, session, meta, {
+        action: "monitor.deleted",
+        entityType: "monitor",
+        entityId: id,
+        beforeData: { name: existing.name, monitor_type: existing.monitor_type },
+    });
 }
 
 export type MonitorListItem = {

@@ -11,6 +11,7 @@ import { withTenant } from "@/lib/tenant/with-tenant";
 import { findUserIdByEmail } from "@/models/user.model";
 import { requireRole } from "@/lib/auth/require-role";
 import { notFound } from "@/lib/errors";
+import { recordAudit, type RequestMeta } from "@/lib/audit/record-audit";
 import type { InviteMemberInput } from "@/lib/dto/organization.dto";
 
 export type MemberListResult = {
@@ -73,6 +74,7 @@ export async function inviteMember(
     tx: TenantClient,
     session: Session,
     input: InviteMemberInput,
+    meta: RequestMeta = {},
 ): Promise<InviteMemberResult> {
     await requireRole(tx, session, ["owner", "admin"]);
 
@@ -88,6 +90,13 @@ export async function inviteMember(
         userId,
         role: input.role,
         invitedBy: session.userId,
+    });
+
+    await recordAudit(tx, session, meta, {
+        action: "member.invited",
+        entityType: "organization_member",
+        entityId: userId,
+        afterData: { role: membership.role, status: membership.status },
     });
 
     return { user_id: membership.user_id, role: membership.role, status: membership.status };

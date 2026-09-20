@@ -2,6 +2,7 @@ import { parseBody } from "@/lib/dto";
 import { updateMonitorSchema } from "@/lib/dto/monitor.dto";
 import { handleRoute, okResponse } from "@/lib/errors";
 import { withSession } from "@/lib/auth/require-session";
+import { extractRequestMeta } from "@/lib/audit/record-audit";
 import {
     deleteMonitorController,
     getMonitor,
@@ -27,8 +28,9 @@ export const PATCH = handleRoute(async (request: Request, ctx: Ctx) => {
 
 export const DELETE = handleRoute(async (request: Request, ctx: Ctx) => {
     const { id } = await ctx.params;
+    const meta = extractRequestMeta(request);
 
-    await withSession(request, (tx, session) => deleteMonitorController(tx, session, id));
+    await withSession(request, (tx, session) => deleteMonitorController(tx, session, id, meta));
 
     return okResponse({ ok: true });
 });

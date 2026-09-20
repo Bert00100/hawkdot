@@ -3,6 +3,7 @@ import type { Session } from "@/lib/auth/require-session";
 import { requireRole } from "@/lib/auth/require-role";
 import { findOrganizationById, updateOrganizationRecord } from "@/models/organization.model";
 import { notFound } from "@/lib/errors";
+import { recordAudit, type RequestMeta } from "@/lib/audit/record-audit";
 import type { UpdateOrganizationInput } from "@/lib/dto/organization.dto";
 
 export type OrganizationResult = {
@@ -38,10 +39,20 @@ export async function updateActiveOrganization(
     tx: TenantClient,
     session: Session,
     data: UpdateOrganizationInput,
+    meta: RequestMeta = {},
 ): Promise<OrganizationResult> {
     await requireRole(tx, session, ["owner", "admin"]);
 
+    const before = await findOrganizationById(tx, session.organizationId);
     const organization = await updateOrganizationRecord(tx, session.organizationId, data);
+
+    await recordAudit(tx, session, meta, {
+        action: "organization.updated",
+        entityType: "organization",
+        entityId: organization.id,
+        beforeData: before ? { name: before.name, slug: before.slug } : null,
+        afterData: { name: organization.name, slug: organization.slug },
+    });
 
     return shape(organization);
 }
