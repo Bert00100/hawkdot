@@ -1,39 +1,160 @@
-### HAWK DOT ###
+# hawkdot
 
+SaaS de monitoramento de infraestrutura (estilo UptimeRobot) — SSL, HTTP, ping —
+multi-tenant, com isolamento por Row-Level Security no PostgreSQL. Backend em
+Next.js 16 (App Router / Route Handlers) + Prisma 7, mais um worker Node
+standalone que executa os checks agendados.
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+> **Atenção**: este projeto roda numa versão do Next.js diferente da que você
+> conhece (breaking changes de API/convenções). Antes de mexer em qualquer
+> coisa relacionada ao framework, leia `node_modules/next/dist/docs/` e o
+> aviso no topo de `AGENTS.md`.
 
-## Getting Started
+## Stack
 
-First, run the development server:
+- **Next.js 16** (Route Handlers em `src/app/api/`, sem Middleware — usa Proxy)
+- **Prisma 7** com `@prisma/adapter-pg` (driver adapter, não a URL de conexão padrão)
+- **PostgreSQL 17** com RLS como mecanismo real de isolamento multi-tenant (o banco é a fonte de verdade, não a aplicação)
+- **Zod** para validação de entrada (DTOs espelhando os `CHECK` constraints do schema)
+- **argon2id** para hash de senha, **jose** para JWT de sessão (cookie httpOnly)
+- **Jest** rodando contra um Postgres real (sem mock de Prisma)
+
+A convenção de camadas (`route.ts` → `controller` → `model` → Prisma), o
+contrato de acesso a dados multi-tenant e as decisões de arquitetura mais
+importantes estão documentadas em **[`AGENTS.md`](./AGENTS.md)** — leia antes
+de adicionar uma feature nova.
+
+## Setup local
+
+### 1. Banco de dados
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+docker compose -f docker/docker-compose.yml up -d
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Sobe um Postgres 17 (`hawkdot-PSQL`) com um superusuário administrativo
+(`adm`). Esse superusuário nunca é usado pela aplicação — só para aplicar o
+schema e rodar os scripts de setup.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Aplique o schema (idempotente, cria os schemas `hawkdot`/`hawkdot_private`,
+tipos, tabelas, RLS policies e os roles `hawkdot_app`/`hawkdot_worker`):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+docker exec -i hawkdot-PSQL psql -U adm -d hawkdot < db/hawkdot_postgresql17_schema.sql
+```
 
-## Learn More
+Em seguida, crie os *login roles* que a aplicação de fato usa para conectar
+(não vêm no schema — são credenciais, não estrutura) e conceda a eles o role
+correspondente:
 
-To learn more about Next.js, take a look at the following resources:
+```sql
+CREATE ROLE hawkdot_api_login LOGIN PASSWORD '<senha>';
+GRANT hawkdot_app TO hawkdot_api_login;
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+CREATE ROLE hawkdot_worker_login LOGIN PASSWORD '<senha>';
+GRANT hawkdot_worker TO hawkdot_worker_login;
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`hawkdot_app` é o role da API (`Route Handlers`), `hawkdot_worker` é o role
+do processo de monitoramento — grants deliberadamente diferentes entre os
+dois (ver "Worker" em `AGENTS.md`).
 
-## Deploy on Vercel
+### 2. Variáveis de ambiente
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Crie um `.env` na raiz (nunca commitado) com:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `DATABASE_URL` | sim | Connection string do role `hawkdot_api_login`, banco `hawkdot` |
+| `JWT_SECRET` | sim | Segredo de assinatura do JWT de sessão (mín. 32 caracteres) |
+| `JWT_TTL_SECONDS` | não (default `3600`) | TTL do JWT — não há revogação imediata, ver `AGENTS.md` |
+| `CREDENTIAL_ENCRYPTION_KEY` | sim | 64 caracteres hex (32 bytes) — chave AES-256-GCM para cifrar segredos de `credentials` |
+| `DATABASE_URL_WORKER` | só para rodar o worker | Connection string do role `hawkdot_worker_login` |
+| `DATABASE_URL_TEST` / `DATABASE_URL_TEST_ADMIN` | só para testes | Connection strings de `hawkdot_test` (app e `adm`) |
+| `DATABASE_URL_WORKER_TEST` | só para testes do worker | Connection string de teste do role `hawkdot_worker_login` |
+
+Gere a chave de criptografia com:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+### 3. Banco de testes
+
+```bash
+npm run db:test:setup
+```
+
+Recria `hawkdot_test` do zero a partir do mesmo `db/hawkdot_postgresql17_schema.sql`
+(idempotente — pode rodar quantas vezes precisar).
+
+### 4. Instalar dependências e subir a API
+
+```bash
+npm install
+npm run dev
+```
+
+API disponível em [http://localhost:3000/api](http://localhost:3000/api).
+
+## Scripts
+
+| Comando | O que faz |
+|---|---|
+| `npm run dev` | Sobe a API em modo desenvolvimento |
+| `npm run build` / `npm run start` | Build e start de produção |
+| `npm run worker` | Roda o processo de monitoramento (`src/worker/run.ts`) — separado da API, conexão própria |
+| `npm test` | Suíte completa (Jest, contra Postgres real, `maxWorkers: 1`) |
+| `npm run test:watch` | Jest em modo watch |
+| `npm run test:coverage` | Suíte com relatório de cobertura |
+| `npm run db:test:setup` | Recria `hawkdot_test` a partir do schema |
+| `npm run lint` | ESLint |
+
+## Arquitetura em uma frase por camada
+
+```
+route.ts  ──▶  controller  ──▶  model  ──▶  Prisma Client
+ (HTTP)        (orquestra)      (dados)     (config/database.ts)
+```
+
+- `src/app/api/<recurso>/route.ts` — só traduz HTTP, sem regra de negócio.
+- `src/controllers/<recurso>.controller.ts` — regra de negócio, autorização por papel, nunca conhece `Request`/`NextResponse`.
+- `src/models/<recurso>.model.ts` — único lugar que fala Prisma; toda query roda dentro do wrapper `withTenant`/`withWorkerTenant`, que define o contexto de RLS.
+- `src/worker/` — processo standalone separado da API, conexão própria (`hawkdot_worker_login`), faz o polling dos monitores devidos e roda os checks.
+- `src/notifications/` — motor de entrega de notificações (casa evento → regra → canal, cooldown, retry com backoff), roda com o role da API.
+
+Detalhes de cada decisão (por que RLS, por que dois roles de banco, os
+achados sobre `INSERT ... RETURNING` com RLS assimétrico, o vocabulário de
+eventos, etc.) estão em `AGENTS.md`.
+
+## API (visão geral)
+
+| Recurso | Rotas |
+|---|---|
+| Autenticação | `POST /api/auth/signup`, `POST /api/auth/login`, `POST /api/auth/logout`, `POST /api/auth/switch-organization` |
+| Sessão | `GET /api/me` |
+| Organização | `GET /api/organizations`, `PATCH /api/organizations` |
+| Membros | `GET/POST /api/organizations/members`, `PATCH/DELETE /api/organizations/members/[userId]`, `POST /api/invitations/accept` |
+| Recursos | `GET /api/resources`, CRUD em `/api/resources/domains`, `/api/resources/endpoints`, `/api/resources/ips` |
+| Monitores | `GET/POST /api/monitors`, `GET/PATCH/DELETE /api/monitors/[id]` |
+| Incidentes | `PATCH /api/incidents/[id]/acknowledge` |
+| Credenciais | `GET/POST /api/credentials`, `DELETE /api/credentials/[id]` |
+| Canais de notificação | `GET/POST /api/notification-channels`, `GET/PATCH/DELETE /api/notification-channels/[id]` |
+| Regras de notificação | `GET/POST /api/notification-rules`, `GET/PATCH/DELETE /api/notification-rules/[id]` |
+| Auditoria | `GET /api/audit-logs` (restrito a `owner`/`admin`) |
+| Saúde | `GET /api/health` |
+
+Toda resposta de sucesso devolve os dados direto, sem envelope; erro sempre
+segue `{ error: { code, message, details? } }` (ver `AGENTS.md` para os
+códigos e status HTTP correspondentes).
+
+## Testes
+
+```bash
+npm test
+```
+
+A suíte roda contra um Postgres real (`hawkdot_test`), não mocka o Prisma —
+policies de RLS e `CHECK` constraints são parte do que está sendo testado.
+Exige `npm run db:test:setup` rodado antes (e o container do docker-compose
+no ar).
