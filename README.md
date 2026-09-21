@@ -253,5 +253,10 @@ artefatos de build ou o client Prisma gerado em uma contribuição.
 
 ## 📄 Licença
 
-O hawkdot é desenvolvido com a proposta de ser open source. O repositório ainda
-não contém um arquivo `LICENSE`; a licença de distribuição está pendente de definição.
+O hawkdot é open source sob a [licença MIT](LICENSE). Qualquer pessoa pode usar,
+estudar, modificar, criar projetos a partir do código e distribuir ou vender
+cópias, inclusive para fins comerciais, desde que preserve o aviso de copyright
+e a licença nas cópias ou partes substanciais do código.
+
+O software é fornecido sem garantias. Consulte o [texto completo da licença](LICENSE)
+para conhecer os termos.
