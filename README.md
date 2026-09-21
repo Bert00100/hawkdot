@@ -10,9 +10,16 @@ standalone que executa os checks agendados.
 > coisa relacionada ao framework, leia `node_modules/next/dist/docs/` e o
 > aviso no topo de `AGENTS.md`.
 
+## Documentação para desenvolvimento
+
+Comece pelo [índice de documentação](docs/README.md): setup completo, mapas de
+backend/frontend, referência HTTP, banco/RLS, worker, testes e diagnóstico.
+O [guia de ambiente local](docs/ambiente-local.md) apresenta a sequência completa
+para quem acabou de clonar o projeto.
+
 ## Stack
 
-- **Next.js 16** (Route Handlers em `src/app/api/`, sem Middleware — usa Proxy)
+- **Next.js 16** (Route Handlers em `src/app/api/`; proteção das rotas com `withSession`)
 - **Prisma 7** com `@prisma/adapter-pg` (driver adapter, não a URL de conexão padrão)
 - **PostgreSQL 17** com RLS como mecanismo real de isolamento multi-tenant (o banco é a fonte de verdade, não a aplicação)
 - **Zod** para validação de entrada (DTOs espelhando os `CHECK` constraints do schema)
@@ -36,11 +43,13 @@ Sobe um Postgres 17 (`hawkdot-PSQL`) com um superusuário administrativo
 (`adm`). Esse superusuário nunca é usado pela aplicação — só para aplicar o
 schema e rodar os scripts de setup.
 
-Aplique o schema (idempotente, cria os schemas `hawkdot`/`hawkdot_private`,
-tipos, tabelas, RLS policies e os roles `hawkdot_app`/`hawkdot_worker`):
+Aplique o schema **uma única vez em banco vazio** (cria os schemas
+`hawkdot`/`hawkdot_private`, tipos, tabelas, RLS policies e os roles
+`hawkdot_app`/`hawkdot_worker`). Ele não é idempotente: para atualizar banco
+existente, use SQL incremental conforme o [guia de banco](docs/banco.md):
 
 ```bash
-docker exec -i hawkdot-PSQL psql -U adm -d hawkdot < db/hawkdot_postgresql17_schema.sql
+docker exec -i hawkdot-PSQL psql -v ON_ERROR_STOP=1 -U adm -d hawkdot < db/hawkdot_postgresql17_schema.sql
 ```
 
 Em seguida, crie os *login roles* que a aplicação de fato usa para conectar
@@ -86,16 +95,19 @@ npm run db:test:setup
 ```
 
 Recria `hawkdot_test` do zero a partir do mesmo `db/hawkdot_postgresql17_schema.sql`
-(idempotente — pode rodar quantas vezes precisar).
+(destrutivo — apaga todos os dados de teste a cada execução).
 
 ### 4. Instalar dependências e subir a API
 
 ```bash
-npm install
+npm ci
+npx prisma generate --config prisma7.config.ts
 npm run dev
 ```
 
-API disponível em [http://localhost:3000/api](http://localhost:3000/api).
+Interface em [http://localhost:3000](http://localhost:3000); saúde da API em
+[http://localhost:3000/api/health](http://localhost:3000/api/health).
+Não existe um handler no caminho `/api` isoladamente.
 
 ### 5. Iniciar o monitoramento
 
