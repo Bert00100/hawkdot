@@ -81,6 +81,7 @@ export const monitorConfigUpdateSchemas = {
 };
 
 export const listMonitorsQuerySchema = dto.paginacao.extend({
+    q: dto.nomeObrigatorio("A busca").optional(),
     monitor_type: monitorType.optional(),
     status: monitorStatus.optional(),
     current_state: z.enum(["unknown", "up", "down", "degraded"]).optional(),

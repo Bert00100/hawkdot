@@ -33,6 +33,9 @@ describe("listResourcesController", () => {
 
         expect(resultado.total).toBe(3); // +1 do resource padrao ja criado por createFullTenant()
         expect(resultado.items.every((r) => r.resource_type === "domain")).toBe(true);
+        const busca = await withTenant(session, (tx) => listResourcesController(tx, { page: 1, per_page: 1, q: "d1" }));
+        expect(busca.total).toBe(1);
+        expect(busca.items[0].display_name).toBe("D1");
     });
 
     it("respeita page/per_page", async () => {

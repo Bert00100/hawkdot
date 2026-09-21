@@ -7,12 +7,13 @@ import { executeMonitor } from "@/worker/execute-monitor";
 // contexto"). Este arquivo cuida do ciclo de vida do processo: conectar,
 // rodar tick() em intervalo, encerrar de forma limpa em SIGINT/SIGTERM.
 const POLL_INTERVAL_MS = 15_000;
-const BATCH_SIZE = 50;
+// Reserva apenas o que cabe no pool, sem expirar reservas numa fila local.
+const BATCH_SIZE = 3;
 
-async function tick(): Promise<void> {
+async function tick(): Promise<number> {
     const reservados = await reserveDueMonitors(BATCH_SIZE);
 
-    if (reservados.length === 0) return;
+    if (reservados.length === 0) return 0;
 
     console.log(`[worker] ${reservados.length} monitor(es) reservado(s)`);
 
@@ -25,10 +26,11 @@ async function tick(): Promise<void> {
         if (resultado.status === "rejected") {
             console.error(
                 `[worker] falha ao executar monitor ${reservados[index].id}:`,
-                resultado.reason,
+                resultado.reason instanceof Error ? resultado.reason.name : "Erro de execucao",
             );
         }
     });
+    return reservados.length;
 }
 
 async function main(): Promise<void> {
@@ -46,7 +48,13 @@ async function main(): Promise<void> {
     process.on("SIGTERM", shutdown);
 
     while (running) {
-        await tick();
+        try {
+            // Drene lotes cheios sem acrescentar 15s de espera por lote.
+            // A concorrencia continua limitada a tres checks por vez.
+            if (await tick() === BATCH_SIZE) continue;
+        } catch (error) {
+            console.error("[worker] falha no polling; nova tentativa em 15s:", error instanceof Error ? error.name : "Erro de conexao");
+        }
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
 
@@ -55,6 +63,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-    console.error("[worker] erro fatal:", error);
+    console.error("[worker] erro fatal:", error instanceof Error ? error.name : "Erro de inicializacao");
     process.exit(1);
 });

@@ -27,6 +27,9 @@ const postgresUrl = z
 const envSchema = z
     .object({
         NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+        NEXT_DIST_DIR: z.enum([".next", ".next-e2e", ".next-build"]).optional(),
+        // Herdado pelos subprocessos do ambiente de QA (Turbopack e ping).
+        PATH: z.string().optional(),
 
         DATABASE_URL: postgresUrl,
 

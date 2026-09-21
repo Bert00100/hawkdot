@@ -97,6 +97,20 @@ npm run dev
 
 API disponível em [http://localhost:3000/api](http://localhost:3000/api).
 
+### 5. Iniciar o monitoramento
+
+Em outro terminal, mantenha o worker em execução:
+
+```bash
+npm run worker
+```
+
+O servidor web sozinho **não executa checagens**. O worker deve registrar
+`conectado como hawkdot_worker_login` e reservar os monitores pendentes.
+`GET /api/health` verifica a API e o banco; não confirma que o worker está ativo.
+A interface atualiza monitores a cada 15 segundos e mostra a última execução
+real. Monitores novos permanecem aguardando até a primeira checagem.
+
 ## Scripts
 
 | Comando | O que faz |
@@ -158,3 +172,29 @@ A suíte roda contra um Postgres real (`hawkdot_test`), não mocka o Prisma —
 policies de RLS e `CHECK` constraints são parte do que está sendo testado.
 Exige `npm run db:test:setup` rodado antes (e o container do docker-compose
 no ar).
+
+### Navegador (desktop e celular)
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+Execute depois de `npm test`, nunca simultaneamente: ambos usam `hawkdot_test`.
+O Playwright inicia uma API separada na porta 3100, seu próprio worker e um
+endpoint HTTPS local na 3443. Usa `.next-e2e` para preservar o servidor de
+desenvolvimento e aceita o certificado de fixture apenas nesses subprocessos.
+As URLs de teste devem apontar para `hawkdot_test`; os testes criam contas
+exclusivas de QA e removem somente essas contas e organizações ao terminar.
+Screenshots ficam em `test-results`; falhas incluem um trace do navegador.
+
+Para verificar produção sem disputar o diretório do servidor ativo:
+
+```bash
+NEXT_DIST_DIR=.next-build npm run build
+```
+
+As listagens de recursos e monitores aceitam `q` para busca por nome antes
+da paginação. Respostas de monitores incluem `last_check_at`, `next_check_at`
+e `last_execution` (nullable), com status, horários, latência e resumo seguro.
+Não há cálculo de uptime histórico nesta versão.

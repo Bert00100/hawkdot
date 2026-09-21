@@ -354,10 +354,11 @@ export type ResourceListResult = {
 
 export async function listResourcesController(
     tx: TenantClient,
-    query: { page: number; per_page: number; resource_type?: ResourceType; status?: "active" | "paused" | "archived"; environment?: "production" | "staging" | "development" | "other" },
+    query: { page: number; per_page: number; q?: string; resource_type?: ResourceType; status?: "active" | "paused" | "archived"; environment?: "production" | "staging" | "development" | "other" },
 ): Promise<ResourceListResult> {
     const offset = (query.page - 1) * query.per_page;
     const filters = {
+        query: query.q,
         resourceType: query.resource_type,
         status: query.status,
         environment: query.environment,

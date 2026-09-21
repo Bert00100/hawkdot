@@ -9,41 +9,44 @@ import {
 import { createMonitorExecution } from "@/worker/monitor-execution.model";
 import { applyCheckResult } from "@/worker/incident-state-machine";
 import { maybeEmitSslExpiring } from "@/worker/ssl-expiry-events";
+import { lockMonitorForResult } from "@/worker/monitor.model";
 
 // Roda o check de UM monitor reservado (#34) e persiste o resultado (#36),
-// tudo dentro da mesma withWorkerTenant() -- cada monitor abre sua propria
-// transacao, entao um monitor lento nao trava os outros do lote.
+// Rede fora da transacao: o timeout do check pode chegar a 300s, enquanto
+// transacoes devem ser curtas. A persistencia e as transicoes sao atomicas.
 export async function executeMonitor(reserved: ReservedMonitor): Promise<void> {
     if (reserved.monitor_type === "server_agent") {
         // Fora do escopo do MVP (so ssl/http/ping tem executor, #35).
         return;
     }
 
-    await withWorkerTenant(reserved.organization_id, async (tx) => {
-        const config =
+    const config = await withWorkerTenant(reserved.organization_id, async (tx) => {
+        return (
             reserved.monitor_type === "ssl"
                 ? await findSslCheckConfig(tx, reserved.id)
                 : reserved.monitor_type === "http"
                   ? await findHttpCheckConfig(tx, reserved.id)
-                  : await findPingCheckConfig(tx, reserved.id);
-
-        if (!config) {
-            // Nao deveria ser alcancavel: todo monitor criado pela API grava
-            // a config junto, na mesma transacao (#31). Se acontecer (dado
-            // inconsistente), so pula -- nao derruba o worker inteiro.
-            console.error(
-                `[worker] monitor ${reserved.id} (${reserved.monitor_type}) sem config -- pulando`,
-            );
-            return;
-        }
-
-        const startedAt = new Date();
-        const result = await runCheck(
-            reserved.monitor_type as "ssl" | "http" | "ping",
-            config,
-            reserved.timeout_seconds,
+                  : await findPingCheckConfig(tx, reserved.id)
         );
-        const finishedAt = new Date();
+    });
+
+    if (!config) {
+        console.error(`[worker] monitor ${reserved.id} (${reserved.monitor_type}) sem config -- pulando`);
+        return;
+    }
+
+    const startedAt = new Date();
+    const result = await runCheck(
+        reserved.monitor_type as "ssl" | "http" | "ping",
+        config,
+        reserved.timeout_seconds,
+    );
+    const finishedAt = new Date();
+
+    await withWorkerTenant(reserved.organization_id, async (tx) => {
+        const monitor = await lockMonitorForResult(tx, reserved.id);
+        if (!monitor || monitor.status !== "active" ||
+            (monitor.last_check_at && monitor.last_check_at >= startedAt)) return;
 
         const execution = await createMonitorExecution(tx, {
             organizationId: reserved.organization_id,

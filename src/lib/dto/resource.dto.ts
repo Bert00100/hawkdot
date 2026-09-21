@@ -70,6 +70,7 @@ export type UpdateIpResourceInput = z.infer<typeof updateIpResourceSchema>;
 
 // Listagem paginada e filtrada (#32).
 export const listResourcesQuerySchema = dto.paginacao.extend({
+    q: dto.nomeObrigatorio("A busca").optional(),
     resource_type: z.enum(["domain", "ip", "url_endpoint"]).optional(),
     status: z.enum(["active", "paused", "archived"]).optional(),
     environment: z.enum(["production", "staging", "development", "other"]).optional(),

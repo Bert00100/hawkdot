@@ -2,6 +2,14 @@ import type { TenantClient } from "@/lib/tenant/with-tenant";
 
 export type MonitorType = "ssl" | "http" | "ping";
 
+const latestExecution = {
+    monitor_executions: {
+        orderBy: [{ started_at: "desc" as const }, { id: "desc" as const }],
+        take: 1,
+        select: { check_status: true, started_at: true, finished_at: true, response_time_ms: true, summary: true },
+    },
+};
+
 export type CreateMonitorData = {
     id: string;
     organizationId: string;
@@ -20,6 +28,7 @@ export type CreateMonitorData = {
 // org vira 400 (FK violation) via translatePrismaError.
 export function createMonitor(tx: TenantClient, data: CreateMonitorData) {
     return tx.monitors.create({
+        include: latestExecution,
         data: {
             id: data.id,
             organization_id: data.organizationId,
@@ -41,7 +50,7 @@ export function createMonitor(tx: TenantClient, data: CreateMonitorData) {
 }
 
 export function findMonitorById(tx: TenantClient, id: string) {
-    return tx.monitors.findUnique({ where: { id } });
+    return tx.monitors.findUnique({ where: { id }, include: latestExecution });
 }
 
 export type UpdateMonitorData = Partial<{
@@ -56,6 +65,7 @@ export type UpdateMonitorData = Partial<{
 
 export function updateMonitor(tx: TenantClient, id: string, data: UpdateMonitorData) {
     return tx.monitors.update({
+        include: latestExecution,
         where: { id },
         data: {
             ...(data.name !== undefined ? { name: data.name } : {}),
@@ -76,6 +86,7 @@ export function deleteMonitor(tx: TenantClient, id: string) {
 }
 
 export type ListMonitorsFilters = {
+    query?: string;
     monitorType?: MonitorType;
     status?: "active" | "paused" | "archived";
     currentState?: "unknown" | "up" | "down" | "degraded";
@@ -85,6 +96,7 @@ export type ListMonitorsFilters = {
 // (organization_id, current_state, status).
 function whereFromFilters(filters: ListMonitorsFilters) {
     return {
+        ...(filters.query ? { name: { contains: filters.query, mode: "insensitive" as const } } : {}),
         ...(filters.monitorType ? { monitor_type: filters.monitorType } : {}),
         ...(filters.currentState ? { current_state: filters.currentState } : {}),
         ...(filters.status ? { status: filters.status } : {}),
@@ -97,6 +109,7 @@ export function listMonitors(
     pagination: { limit: number; offset: number },
 ) {
     return tx.monitors.findMany({
+        include: latestExecution,
         where: whereFromFilters(filters),
         orderBy: { created_at: "desc" },
         take: pagination.limit,

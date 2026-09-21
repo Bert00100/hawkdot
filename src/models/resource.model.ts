@@ -58,6 +58,7 @@ export function deleteResourceParent(tx: TenantClient, id: string) {
 }
 
 export type ListResourcesFilters = {
+    query?: string;
     resourceType?: ResourceType;
     status?: "active" | "paused" | "archived";
     environment?: "production" | "staging" | "development" | "other";
@@ -69,6 +70,7 @@ export type ListResourcesFilters = {
 // aqui para o Postgres conseguir usar o indice.
 function whereFromFilters(filters: ListResourcesFilters) {
     return {
+        ...(filters.query ? { display_name: { contains: filters.query, mode: "insensitive" as const } } : {}),
         ...(filters.resourceType ? { resource_type: filters.resourceType } : {}),
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.environment ? { environment: filters.environment } : {}),

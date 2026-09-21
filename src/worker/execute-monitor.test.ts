@@ -32,6 +32,42 @@ function startServer(handler: http.RequestListener): Promise<{ url: string; clos
 }
 
 describe("executeMonitor", () => {
+    it("persiste um check que demora mais que o timeout padrao da transacao", async () => {
+        const { organization, monitor } = await createFullTenant();
+        const server = await startServer((_req, res) => {
+            setTimeout(() => res.writeHead(200).end("ok"), 5_200);
+        });
+        await adminClient.http_monitor_configs.create({
+            data: { monitor_id: monitor.id, organization_id: organization.id, url: server.url },
+        });
+        try {
+            await executeMonitor({ ...monitor, monitor_type: "http", timeout_seconds: 8 });
+            expect(await adminClient.monitor_executions.count({ where: { monitor_id: monitor.id } })).toBe(1);
+            expect(await adminClient.monitors.findUnique({ where: { id: monitor.id } })).toMatchObject({ current_state: "up" });
+        } finally {
+            await server.close();
+        }
+    }, 15_000);
+
+    it.each(["paused", "deleted"] as const)("descarta resultado quando o monitor fica %s durante o check", async (change) => {
+        const { organization, monitor } = await createFullTenant();
+        const server = await startServer((_req, res) => {
+            void (change === "paused"
+                ? adminClient.monitors.update({ where: { id: monitor.id }, data: { status: "paused" } })
+                : adminClient.monitors.delete({ where: { id: monitor.id } }))
+                .then(() => res.writeHead(200).end("ok"));
+        });
+        await adminClient.http_monitor_configs.create({
+            data: { monitor_id: monitor.id, organization_id: organization.id, url: server.url },
+        });
+        try {
+            await executeMonitor({ ...monitor, monitor_type: "http" });
+            expect(await adminClient.monitor_executions.count({ where: { monitor_id: monitor.id } })).toBe(0);
+        } finally {
+            await server.close();
+        }
+    });
+
     it("roda o check, grava a execucao e atualiza last_check_at", async () => {
         const { organization, resource } = await createFullTenant();
         const server = await startServer((_req, res) => res.writeHead(200).end("ok"));

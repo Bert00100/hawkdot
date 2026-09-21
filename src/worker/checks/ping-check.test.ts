@@ -45,4 +45,5 @@ describe("runPingCheck", () => {
         expect(resultado.observed_state).toBe("down");
     }, 10_000);
 
+
 });

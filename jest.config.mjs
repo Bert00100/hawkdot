@@ -11,6 +11,7 @@ const config = {
   // a corrida (o suite inteiro roda em segundos mesmo assim).
   maxWorkers: 1,
   testEnvironment: 'node',
+  testPathIgnorePatterns: ['/node_modules/', '/e2e/', '/.next-e2e/', '/.next-build/'],
   // O next/jest resolve o alias `@/` reescrevendo os imports no SWC, o que nao
   // alcanca o argumento de `jest.mock('@/...')` — ele e string comum, nao
   // especificador de import. O mapper abaixo cobre esse caso.

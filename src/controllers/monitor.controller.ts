@@ -29,7 +29,37 @@ import { recordAudit, type RequestMeta } from "@/lib/audit/record-audit";
 
 const WRITE_ROLES = ["owner", "admin", "operator"] as const;
 
-export type MonitorResult = {
+type LastExecution = {
+    check_status: string;
+    started_at: Date;
+    finished_at: Date | null;
+    response_time_ms: number | null;
+    summary: string | null;
+};
+
+type MonitorObservation = {
+    last_check_at: Date | null;
+    next_check_at: Date | null;
+    last_execution: LastExecution | null;
+};
+
+function observation(monitor: Pick<MonitorRow, "last_check_at" | "next_check_at" | "monitor_executions">): MonitorObservation {
+    const execution = monitor.monitor_executions[0];
+    // Erros de rede/TLS podem conter URLs, headers ou segredos. Nao exponha
+    // mensagens arbitrarias persistidas pelo executor na resposta publica.
+    const messages: Record<string, string> = {
+        success: "Checagem concluída com sucesso.", failure: "Resposta diferente da esperada.",
+        timeout: "Tempo limite da checagem excedido.", error: "Não foi possível concluir a checagem.",
+    };
+    return {
+        last_check_at: monitor.last_check_at,
+        next_check_at: monitor.next_check_at,
+        last_execution: execution ? { ...execution, summary: /^HTTP \d{3}$/.test(execution.summary ?? "")
+            ? execution.summary : messages[execution.check_status] ?? "Checagem concluída." } : null,
+    };
+}
+
+export type MonitorResult = MonitorObservation & {
     id: string;
     resource_id: string;
     monitor_type: string;
@@ -45,6 +75,9 @@ export type MonitorResult = {
 };
 
 type MonitorRow = {
+    last_check_at: Date | null;
+    next_check_at: Date | null;
+    monitor_executions: LastExecution[];
     id: string;
     resource_id: string;
     monitor_type: string;
@@ -60,6 +93,7 @@ type MonitorRow = {
 
 function shape(monitor: MonitorRow, config: unknown): MonitorResult {
     return {
+        ...observation(monitor),
         id: monitor.id,
         resource_id: monitor.resource_id,
         monitor_type: monitor.monitor_type,
@@ -212,7 +246,7 @@ export async function deleteMonitorController(
     });
 }
 
-export type MonitorListItem = {
+export type MonitorListItem = MonitorObservation & {
     id: string;
     resource_id: string;
     monitor_type: string;
@@ -233,6 +267,7 @@ export async function listMonitorsController(
     query: {
         page: number;
         per_page: number;
+        q?: string;
         monitor_type?: "ssl" | "http" | "ping";
         status?: "active" | "paused" | "archived";
         current_state?: "unknown" | "up" | "down" | "degraded";
@@ -240,6 +275,7 @@ export async function listMonitorsController(
 ): Promise<MonitorListResult> {
     const offset = (query.page - 1) * query.per_page;
     const filters = {
+        query: query.q,
         monitorType: query.monitor_type,
         status: query.status,
         currentState: query.current_state,
@@ -252,6 +288,7 @@ export async function listMonitorsController(
 
     return {
         items: monitors.map((m) => ({
+            ...observation(m),
             id: m.id,
             resource_id: m.resource_id,
             monitor_type: m.monitor_type,
