@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">Hawk Dot — Monitoramento de infraestrutura</title>
+  <desc id="desc">Identidade em grafite e âmbar. HTTP, SSL e ping. Projeto open source para executar no seu ambiente.</desc>
+  <rect width="1200" height="360" rx="12" fill="#1f1f1e"/>
+  <rect x="1" y="1" width="1198" height="358" rx="11" fill="none" stroke="#3a3a38"/>
+  <path d="M48 0H1152" stroke="#fdc200" stroke-width="4"/>
+  <g fill="none" stroke="#3a3a38">
+    <circle cx="1020" cy="172" r="118"/>
+    <circle cx="1020" cy="172" r="82"/>
+    <circle cx="1020" cy="172" r="46"/>
+    <path d="M878 172H1162M1020 30V314"/>
+  </g>
+  <path d="M893 172H943L964 135L997 215L1025 159L1043 172H1145" fill="none" stroke="#fdc200" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="1043" cy="172" r="5" fill="#fdc200"/>
+  <circle cx="79" cy="81" r="22" fill="#1f1f1e" stroke="#fdc200" stroke-width="2"/>
+  <circle cx="79" cy="81" r="6" fill="#fdc200"/>
+  <text x="119" y="99" fill="#f4f3ee" font-family="Chakra Petch, sans-serif" font-size="52" font-weight="700">hawk<tspan fill="#fdc200">dot</tspan></text>
+  <text x="56" y="166" fill="#f4f3ee" font-family="IBM Plex Sans, sans-serif" font-size="30" font-weight="600">Cada serviço sob o olho do falcão.</text>
+  <text x="56" y="207" fill="#a9a8a1" font-family="IBM Plex Sans, sans-serif" font-size="20">Monitoramento open source. No seu ambiente.</text>
+  <g font-family="JetBrains Mono, monospace" font-size="14">
+    <rect x="56" y="260" width="112" height="38" rx="4" fill="#292928" stroke="#3a3a38"/>
+    <circle cx="77" cy="279" r="4" fill="#4cd69b"/>
+    <text x="92" y="284" fill="#f4f3ee">HTTP</text>
+    <rect x="180" y="260" width="104" height="38" rx="4" fill="#292928" stroke="#3a3a38"/>
+    <circle cx="201" cy="279" r="4" fill="#4cd69b"/>
+    <text x="216" y="284" fill="#f4f3ee">SSL</text>
+    <rect x="296" y="260" width="112" height="38" rx="4" fill="#292928" stroke="#3a3a38"/>
+    <circle cx="317" cy="279" r="4" fill="#4cd69b"/>
+    <text x="332" y="284" fill="#f4f3ee">PING</text>
+    <text x="56" y="333" fill="#a9a8a1" font-size="11">IDENTIDADE VISUAL · ILUSTRAÇÃO, NÃO STATUS EM TEMPO REAL</text>
+  </g>
+</svg>

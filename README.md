@@ -1,5 +1,7 @@
 # hawkdot
 
+![Hawk Dot: monitoramento open source com identidade em grafite e âmbar](docs/assets/readme-banner.svg)
+
 **Monitoramento de infraestrutura open source, para executar no seu próprio ambiente.**
 
 Acompanhe a disponibilidade de endpoints HTTP, a validade de certificados SSL e a
@@ -10,28 +12,28 @@ O projeto suporta múltiplas organizações, com permissões por papel e isolame
 dados no PostgreSQL. Está em desenvolvimento: confira o escopo atual abaixo antes
 de planejar uma instalação.
 
-[Começar](#como-executar-localmente) · [Documentação](docs/README.md) ·
-[API](docs/api.md) · [Contribuir](#como-contribuir) ·
-[Issues](https://github.com/Bert00100/hawkdot/issues)
+[🚀 Começar](#começar) · [📚 Documentação](docs/README.md) ·
+[🔌 API](docs/api.md) · [🤝 Contribuir](#contribuir) ·
+[💬 Issues](https://github.com/Bert00100/hawkdot/issues)
 
-## O que você pode fazer hoje
+## ✨ O que você pode fazer hoje
 
-- **Monitorar HTTP:** configurar método, headers, corpo, faixa de status esperada,
+- 🌐 **Monitorar HTTP:** configurar método, headers, corpo, faixa de status esperada,
   conteúdo da resposta e redirecionamentos.
-- **Verificar SSL:** acompanhar validade do certificado, cadeia de confiança,
+- 🔒 **Verificar SSL:** acompanhar validade do certificado, cadeia de confiança,
   hostname e faixas de aviso de vencimento.
-- **Testar conectividade:** executar ping e definir tolerância de perda de pacotes.
-- **Gerenciar recursos e monitores:** cadastrar domínios, IPs e endpoints; buscar,
+- 📡 **Testar conectividade:** executar ping e definir tolerância de perda de pacotes.
+- 🎛️ **Gerenciar recursos e monitores:** cadastrar domínios, IPs e endpoints; buscar,
   filtrar, paginar, editar e pausar monitores pela interface.
-- **Acompanhar incidentes:** confirmar quedas e recuperações com limites de falhas
+- 🚨 **Acompanhar incidentes:** confirmar quedas e recuperações com limites de falhas
   e sucessos consecutivos, mantendo registros de execução e eventos.
-- **Separar equipes:** organizar dados por organização e controlar acesso com os
+- 👥 **Separar equipes:** organizar dados por organização e controlar acesso com os
   papéis owner, admin, operator e viewer.
 
 A API também oferece gestão de membros, credenciais cifradas, auditoria, canais e
 regras de notificação. Consulte os contratos e exemplos na [referência HTTP](docs/api.md).
 
-### Estado atual e funcionalidades pendentes
+### 🚧 Estado atual e funcionalidades pendentes
 
 | Área | Situação |
 |---|---|
@@ -46,7 +48,9 @@ regras de notificação. Consulte os contratos e exemplos na [referência HTTP](
 Criar um canal ou regra ainda **não ativa o envio automático**. Veja o
 [guia de worker e notificações](docs/worker-notificacoes.md) para entender essa integração.
 
-## Como executar localmente
+<a id="começar"></a>
+
+## 🚀 Como executar localmente
 
 Você precisa de Node.js compatível com as dependências (por exemplo, **22.12+ na
 linha 22**), npm, Git e Docker com Compose. Checks de ping também precisam do
@@ -104,7 +108,7 @@ não confirma a atividade do worker.
 Para instruções completas e solução de problemas, consulte
 [ambiente local](docs/ambiente-local.md) e [operação e diagnóstico](docs/operacao.md).
 
-## Tecnologias e arquitetura
+## 🧩 Tecnologias e arquitetura
 
 | Parte | Tecnologias |
 |---|---|
@@ -137,7 +141,44 @@ Consulte o [mapa de arquitetura](docs/arquitetura.md) e as
 [convenções do projeto](AGENTS.md) antes de alterar os fluxos. Para mudanças no
 Next.js, leia também os guias da versão instalada em `node_modules/next/dist/docs/`.
 
-## Documentação
+## 🎨 Nosso design system
+
+A identidade do Hawk Dot combina **grafite e âmbar**, superfícies discretas e cores
+semânticas para facilitar a leitura do monitoramento. O tema escuro é o padrão;
+o projeto também define tokens para tema claro.
+
+| Token no tema escuro | Cor | Uso |
+|---|---|---|
+| Grafite · `--brand-graphite` | `#1F1F1E` | Identidade e superfície principal |
+| Âmbar · `--brand-amber` | `#FDC200` | Marca, destaques e ações principais |
+| Superfície elevada · `--surface-raised` | `#292928` | Cards e áreas de apoio |
+| Texto · `--ink` | `#F4F3EE` | Conteúdo principal |
+| Texto secundário · `--ink-muted` | `#A9A8A1` | Legendas e contexto |
+| 🟢 Disponível · `--status-up` | `#4CD69B` | Estado up |
+| 🟠 Degradado · `--status-degraded` | `#FF9F45` | Estado degraded |
+| 🔴 Indisponível · `--status-down` | `#FF7A70` | Estado down |
+| ⏸️ Pausado · `--status-paused` | `#A9A8A1` | Estado paused |
+
+**Tipografia:** Chakra Petch nos títulos, IBM Plex Sans nos textos e JetBrains Mono
+nos dados e métricas. A marca usa um círculo com ponto central em âmbar. Os cantos
+variam de 2/4 px em elementos compactos a 12 px em áreas maiores; pills usam raio
+completo.
+
+Para manter a interface consistente, reutilize os
+[tokens de cores e medidas](src/app/globals.css), a
+[configuração de fontes](src/app/layout.tsx) e os
+[componentes de UI](src/components/ui). Mostre estados com texto ou ícone além da
+cor e preserve contraste no tema claro. O [guia frontend](docs/frontend.md)
+explica como aplicar isso em telas e formulários.
+
+A capa deste README é uma ilustração da identidade, não uma captura do produto ou
+um painel de status. O GitHub controla as fontes e o tema do texto Markdown;
+a identidade visual personalizada fica concentrada na capa e nos elementos gráficos.
+
+[Referência visual compartilhada — artefato Hawk Dot](https://claude.ai/artifact/YFH78EbHdv316vYnxnAx12).
+Os valores acima correspondem à implementação versionada no projeto.
+
+## 📚 Documentação
 
 Os guias explicam onde mexer e como validar uma alteração, com caminhos para os
 arquivos e exemplos práticos.
@@ -157,7 +198,7 @@ arquivos e exemplos práticos.
 
 O [índice completo](docs/README.md) também oferece trilhas de leitura para backend e frontend.
 
-## Testes e comandos úteis
+## 🧪 Testes e comandos úteis
 
 Configure primeiro as URLs de teste do `.env`, apontando exclusivamente para
 `hawkdot_test`. O comando de preparação abaixo **apaga e recria esse banco**:
@@ -191,7 +232,9 @@ Os testes de dados usam PostgreSQL real para verificar RLS, constraints e transa
 O build não inicia o worker. Para detalhes de execução fora do ambiente de
 desenvolvimento, consulte o [guia de operação](docs/operacao.md).
 
-## Como contribuir
+<a id="contribuir"></a>
+
+## 🤝 Como contribuir
 
 Contribuições de código, documentação, testes e relatos de problemas são bem-vindas.
 
@@ -208,7 +251,7 @@ Ao relatar um bug, inclua passos para reproduzir, comportamento esperado e obser
 versões e mensagens de erro sem senhas, tokens ou dados privados. Não inclua `.env`,
 artefatos de build ou o client Prisma gerado em uma contribuição.
 
-## Licença
+## 📄 Licença
 
 O hawkdot é desenvolvido com a proposta de ser open source. O repositório ainda
 não contém um arquivo `LICENSE`; a licença de distribuição está pendente de definição.
