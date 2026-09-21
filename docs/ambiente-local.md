@@ -46,7 +46,13 @@ Se os logins já existirem, confira os grants e ajuste senhas; não repita `CREA
 
 ## 3. Configure `.env`
 
-Crie `.env` na raiz. Substitua os marcadores abaixo; senhas com caracteres especiais precisam de percent-encoding na URL (por exemplo, `@` vira `%40`). Não versione o arquivo.
+Copie o [arquivo de exemplo](../.env.example) para `.env` na raiz (somente se ainda não tiver seu `.env`):
+
+```bash
+cp .env.example .env
+```
+
+Substitua os marcadores abaixo; senhas com caracteres especiais precisam de percent-encoding na URL (por exemplo, `@` vira `%40`). Não versione o arquivo.
 
 ```dotenv
 DATABASE_URL=postgresql://hawkdot_api_login:SENHA_API@localhost:5432/hawkdot

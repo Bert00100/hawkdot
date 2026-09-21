@@ -70,7 +70,14 @@ dois (ver "Worker" em `AGENTS.md`).
 
 ### 2. Variáveis de ambiente
 
-Crie um `.env` na raiz (nunca commitado) com:
+Copie [`.env.example`](./.env.example) para `.env` na raiz, caso ainda não
+tenha um, e substitua os marcadores pelas suas senhas e segredos gerados:
+
+```bash
+cp .env.example .env
+```
+
+O `.env` real nunca deve ser commitado. Configure:
 
 | Variável | Obrigatória | Descrição |
 |---|---|---|
